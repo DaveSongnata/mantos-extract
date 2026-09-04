@@ -214,21 +214,38 @@
   #screen-login{position:relative;overflow:hidden;flex:1;display:flex;flex-direction:column;justify-content:center;}
   .login-bg-video{
     position:absolute;inset:0;width:100%;height:100%;object-fit:fill;
-    filter:blur(20px) saturate(120%);z-index:0;
+    filter:blur(20px) saturate(145%) contrast(1.05);z-index:0;
   }
-  .login-bg-overlay{position:absolute;inset:0;background:rgba(18,18,18,.45);z-index:1;}
+  /* Só uma leve contenção de brilho — o vídeo em si carrega a cor. A ESCURIDÃO que garante
+     legibilidade mora no cartão (.login-glass), não numa camada plana cobrindo a tela toda
+     (isso é o que deixava tudo cinza-uniforme antes). */
+  .login-bg-overlay{position:absolute;inset:0;background:rgba(12,12,12,.16);z-index:1;}
   .login-glass{
     position:relative;z-index:2;
-    background:rgba(255,255,255,.10);
-    -webkit-backdrop-filter:blur(16px) saturate(150%);
-    backdrop-filter:blur(16px) saturate(150%);
-    border:var(--lw) solid rgba(255,255,255,.5);
+    background:rgba(10,10,10,.44);
+    -webkit-backdrop-filter:blur(18px) saturate(160%);
+    backdrop-filter:blur(18px) saturate(160%);
+    border:var(--lw) solid rgba(255,255,255,.38);
     padding:26px 18px 22px;
     color:#fff;
   }
   /* Textos herdam branco do .login-glass (contraste contra o vídeo escuro) — exceto o banner
      de erro, que mantém seu próprio fundo claro sólido e precisa continuar com texto escuro. */
   .login-glass .banner .msg{color:var(--ink);}
+  /* Inputs também viram vidro (Dave, 2026-09-04: "talvez transparência nos inputs?") — um
+     vidro mais denso que o do cartão (menos blur, mais opacidade), então o texto digitado
+     continua legível mesmo com o vídeo se movendo atrás, sem virar um retângulo branco sólido
+     destoando do resto. */
+  .login-glass input[type=email],
+  .login-glass input[type=password],
+  .login-glass input[type=text]{
+    background:rgba(255,255,255,.12);
+    -webkit-backdrop-filter:blur(8px);
+    backdrop-filter:blur(8px);
+    border-color:rgba(255,255,255,.45);
+    color:#fff;
+  }
+  .login-glass input::placeholder{color:rgba(255,255,255,.55);}
 
   /* ---- empty state / detectar (4.2) -------------------------------------------------- */
   .empty-state{

@@ -159,6 +159,13 @@ namespace MantosExtract.AddIn.Ui
 
         private void PostAuth(AuthOrchestratorResult result)
         {
+            // O operador só vê result.ErrorMessage/WarningMessage (mensagem amigável). O
+            // DEBUG detail (código + InnerException real: DNS, TLS, timeout...) vai só pro
+            // log — sem isso, toda falha de rede parecia idêntica no docker.log ("Sem conexão
+            // com o servidor", sem mais nada), impossível de diagnosticar à distância.
+            if (result.DebugDetail != null)
+                MantosExtractLog.Write("Auth falhou/degradou - detalhe: " + result.DebugDetail);
+
             if (result.Screen == AuthScreen.Login)
             {
                 Post(new { type = "auth", screen = "login", error = result.ErrorMessage });

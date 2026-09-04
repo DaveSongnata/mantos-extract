@@ -54,7 +54,7 @@ namespace MantosExtract.Core.Auth
                 // Network down, IP/time-window denial, etc: the operator already has a valid
                 // local session and a last-known credit balance — showing Home with a warning
                 // banner beats bouncing them to a login screen they cannot even submit offline.
-                return AuthOrchestratorResult.ToHome(session, ex.Message);
+                return AuthOrchestratorResult.ToHome(session, ex.Message, ex.ToString());
             }
         }
 
@@ -69,7 +69,7 @@ namespace MantosExtract.Core.Auth
             }
             catch (MantosfcAuthException ex)
             {
-                return AuthOrchestratorResult.ToLogin(ex.Message);
+                return AuthOrchestratorResult.ToLogin(ex.Message, ex.ToString());
             }
         }
 
