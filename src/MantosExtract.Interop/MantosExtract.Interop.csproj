@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MantosExtract.Interop — the ONLY place that talks to CorelDRAW.
+
+    net48 (the framework the CorelDRAW addon host loads) and late-bound `dynamic` COM, so one
+    binary drives CorelDRAW 2024/25/26. Deliberately dumb: reads/writes the document, decides
+    nothing — MantosExtract.Core owns every decision.
+
+    HOUSE RULE: no VGCore constant or member enters this project without being grepped in
+    ../../../optimus/docs/vgcore-tlb-dump.txt first. Guessing cdrMillimeter as 4 (it is 3; 4 is
+    centimetres) is the 10x bug that has already shipped twice in the sibling repos.
+
+    Fase 1 scope: skeleton only (ICorelHost + CorelHost stub). Real COM (selection reading,
+    export, import) lands in Fases 2-3.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MantosExtract.Interop</RootNamespace>
+    <AssemblyName>MantosExtract.Interop</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MantosExtract.Core\MantosExtract.Core.csproj" />
+  </ItemGroup>
+
+</Project>

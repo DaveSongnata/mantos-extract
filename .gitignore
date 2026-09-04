@@ -1,0 +1,28 @@
+# .NET build output
+bin/
+obj/
+*.user
+.vs/
+
+# Build/deploy staging (regenerado por scripts/deploy-dev.ps1) — não é fonte
+/dist/
+
+# Chaves privadas / segredos — nunca versionar
+*.pfx
+*.p12
+*.pem
+*.key
+secrets/
+
+# Editor / SO
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs e temporários
+*.log
+*.tmp
+
+# Claude Code
+.claude/

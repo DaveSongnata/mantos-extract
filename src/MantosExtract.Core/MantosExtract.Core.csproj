@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MantosExtract.Core — PURE logic. No COM, no WPF/WebView2, no Win32.
+
+    netstandard2.0 so it is consumable by the net48 add-in AND testable from net8.0 on any
+    machine, no CorelDRAW and no Windows required. Auth/session parsing, i18n, credit/upscale
+    math, mantosfc HTTP client — everything decidable without touching CorelDRAW lives here.
+    Same split as Optimus.Core / SisCut's netstandard2.0 libs — it is what makes TDD possible.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MantosExtract.Core</RootNamespace>
+    <AssemblyName>MantosExtract.Core</AssemblyName>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>MantosExtract.Core.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <!-- netstandard2.0 has no built-in System.Text.Json; needed for the mantosfc HTTP contracts. -->
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>

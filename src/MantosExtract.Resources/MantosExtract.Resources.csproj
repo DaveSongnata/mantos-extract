@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MantosExtract addon ICON/STRING resources — the toolbar button mark.
+
+    PLACEHOLDER (Fase 1, see plans/Phase_1.md "DO NOT WANT"): no Davidson-approved mark exists
+    yet, so this ships as a code-only DLL with no Win32 resource. addon/config.xml already
+    references icon id 101 in this DLL (mirroring optimus/src/Optimus.Resources), so the
+    toolbar button renders blank until a real .res is added here (same recipe as Optimus:
+    icons/gen_icons.ps1 draws the mark, build_res.ps1 packs the .res, then
+    <Win32Resource>mantosextract.res</Win32Resource> is set on this project).
+
+    net48 so it deploys next to MantosExtract.AddIn.dll under
+    <Corel>\Programs64\Addons\MantosExtract\.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>MantosExtract.Resources</AssemblyName>
+    <RootNamespace>MantosExtract.Resources</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- AssemblyMarker.cs (one trivial type) is what makes this emit a real assembly. -->
+
+</Project>

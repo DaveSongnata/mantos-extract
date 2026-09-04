@@ -1,0 +1,32 @@
+Mantos Extract — Third-Party Notices
+
+This product bundles or depends on the following third-party software. Only permissive
+licenses (MIT/Apache-2.0/BSD) are used, matching the standard already set by the sibling
+products (Optimus/THIRD-PARTY-NOTICES.txt).
+
+--------------------------------------------------------------------------------
+Real-ESRGAN (ncnn-vulkan build) — realesrgan-ncnn-vulkan.exe
+--------------------------------------------------------------------------------
+Used for: local 2x upscale of extracted elements (Fase 4, plans/Phase_4.md).
+License: MIT (both the original Real-ESRGAN project and the ncnn-vulkan Windows build).
+Source: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan
+
+STATUS: NOT YET BUNDLED. This repository does not download or embed the binary — see
+plans/Phase_4.md ("A VALIDAR EMPIRICAMENTE ANTES DE FIXAR NO CÓDIGO") and
+scripts/deploy-dev.ps1, which looks for it under assets/upscale/ and warns (does not fail)
+when it is absent. UpscaleRunner (src/MantosExtract.Core/Upscale/UpscaleRunner.cs) degrades
+to UpscaleStatus.BinaryMissing and imports the un-upscaled original when the binary is
+missing — the product works without it, just without the 2x step.
+
+Before shipping to a client: download the official release, verify its checksum, place it
+(plus its .param/.bin model files) under assets/upscale/, and re-run scripts/deploy-dev.ps1.
+
+--------------------------------------------------------------------------------
+Microsoft.Web.WebView2 (NuGet)
+--------------------------------------------------------------------------------
+License: MIT. https://www.nuget.org/packages/Microsoft.Web.WebView2
+
+--------------------------------------------------------------------------------
+System.Text.Json (NuGet)
+--------------------------------------------------------------------------------
+License: MIT. https://www.nuget.org/packages/System.Text.Json

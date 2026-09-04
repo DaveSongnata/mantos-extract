@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MantosExtract.Windows — Windows-only I/O that is NOT CorelDRAW: DPAPI-protected local
+    storage (session + BYOK OpenAI key) and simple UI prefs (language).
+
+    Separate from MantosExtract.Interop so the CorelDRAW COM layer stays focused, and separate
+    from MantosExtract.Core so Core remains pure and testable on any platform (net8.0, no
+    Windows required). net48 for System.Security.Cryptography.ProtectedData (DPAPI).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MantosExtract.Windows</RootNamespace>
+    <AssemblyName>MantosExtract.Windows</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Security" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MantosExtract.Core\MantosExtract.Core.csproj" />
+  </ItemGroup>
+
+</Project>

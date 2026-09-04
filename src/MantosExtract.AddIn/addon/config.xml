@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MantosExtract Add-on - config.xml (button ICON / STRING map)
+
+  Ties our command GUID to the numeric resources embedded in MantosExtract.Resources.dll so the
+  toolbar/menu button renders the Mantos Extract mark instead of a blank slot:
+
+    AppUI.xslt  : <itemData guid="ce01d45e-..." icon="guid://ce01d45e-..." .../>
+    config.xml  : <resEntry id="ce01d45e-..." string="101" icon="101"/>  (this file)
+    resource DLL: MantosExtract.Resources.dll SHOULD carry RT_GROUP_ICON 101 + RT_STRING 101 —
+                  PENDING (Fase 1 ships a code-only placeholder DLL, see plans/Phase_1.md).
+
+  path is relative to this addon folder (<Corel>\Programs64\Addons\MantosExtract\), where the
+  installer also drops MantosExtract.Resources.dll.
+-->
+<config>
+  <resources>
+    <resource name="MantosExtract" path="MantosExtract.Resources.dll">
+      <resourceMap>
+        <resEntry id="ce01d45e-4bf8-455b-b452-571fb0c12182" string="101" icon="101"/>
+      </resourceMap>
+    </resource>
+  </resources>
+</config>

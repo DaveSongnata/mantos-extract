@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mantos Extract</title>
+<style>
+  /*
+    DESIGN SYSTEM — Swiss Style aplicado a futebol/confecção (Dave, 2026-09-03).
+    Referência: biblioteca de componentes UI/UX "Swiss Style | Futebol e Confecção" —
+    tipografia grotesca em caixa-alta, grid rígido, bordas pretas duras (raio ZERO em
+    qualquer elemento), paleta restrita a vermelho-bandeira/preto/branco/cinza, faixas
+    pretas como cabeçalho de seção, listras diagonais e xadrez como elementos estruturais,
+    números tratados como peça gráfica (camisa/placar), não decoração.
+
+    Esta folha de estilo é o ponto de partida do design system do PACOTE inteiro (Davi
+    pediu "a criação do nosso design system") — os tokens abaixo (cor/tipo/borda/grid) são
+    escritos pra serem portáveis pros addins irmãos depois, mesmo que hoje só o Mantos
+    Extract os use.
+
+    Fontes SISTEMA APENAS, sem webfont/CDN (produto tem que funcionar offline). Arial/Arial
+    Black são a escolha CORRETA aqui, não um atalho: o Estilo Suíço É a estética da
+    grotesca neutra (Helvetica/Akzidenz-Grotesk); Arial é o clone universal do Windows —
+    period-accurate, não genérico.
+  */
+  :root{
+    --paper:#f2f0ea;       /* fundo "papel de pôster", off-white quente */
+    --surface:#ffffff;     /* cartões, inputs */
+    --ink:#121212;         /* preto quase puro — texto e TODA borda */
+    --red:#e0271c;         /* vermelho-bandeira, cor de ação única */
+    --red-dark:#9c150f;    /* vermelho profundo — swatches, pressed */
+    --gray:#b7b6b0;        /* cinza médio — blocos/padrões secundários */
+    --gray-light:#e3e1d8;  /* cinza claro — preenchimento sutil, disabled */
+    --line:var(--ink);
+    --lw:2px;              /* peso padrão de borda — duro, nunca "hairline" cinza */
+    --font:"Arial Black",Arial,"Helvetica Neue",sans-serif;
+    --font-body:Arial,"Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-size:13px;
+    line-height:1.4;
+    overflow-x:hidden;
+    overflow-y:auto;
+  }
+  .app{display:flex;flex-direction:column;min-height:100%;}
+  [hidden]{display:none!important}
+  svg{display:block}
+
+  /* ---- utilitários de grid suíço ------------------------------------------------- */
+  .stripes{
+    height:10px;flex:none;
+    background:repeating-linear-gradient(45deg,var(--red) 0 6px,var(--surface) 6px 12px);
+    border-top:var(--lw) solid var(--ink);border-bottom:var(--lw) solid var(--ink);
+  }
+  .stripes.k{background:repeating-linear-gradient(45deg,var(--ink) 0 6px,var(--surface) 6px 12px);}
+  .checker{
+    background-image:
+      linear-gradient(45deg,var(--gray-light) 25%,transparent 25%,transparent 75%,var(--gray-light) 75%),
+      linear-gradient(45deg,var(--gray-light) 25%,transparent 25%,transparent 75%,var(--gray-light) 75%);
+    background-size:16px 16px;background-position:0 0,8px 8px;
+  }
+  /* marcas de registro (canto tipográfico de impressão) — só em UM elemento por tela */
+  .reg{position:relative}
+  .reg::before,.reg::after{
+    content:"+";position:absolute;font-family:var(--font);font-size:14px;line-height:1;color:var(--ink);
+  }
+  .reg::before{top:-7px;left:-7px}
+  .reg::after{bottom:-7px;right:-7px}
+
+  /* ---- header (faixa preta, sempre) ----------------------------------------------- */
+  .topbar{
+    display:flex;align-items:stretch;justify-content:space-between;
+    background:var(--ink);color:var(--surface);flex:0 0 auto;
+    border-bottom:var(--lw) solid var(--ink);
+  }
+  .brand{
+    display:flex;align-items:center;gap:8px;padding:10px 12px;
+    font-family:var(--font);font-weight:900;letter-spacing:.01em;font-size:13px;text-transform:uppercase;
+  }
+  .brand .tab{width:10px;height:18px;background:var(--red);flex:none;}
+  .topbar-right{display:flex;align-items:stretch;}
+  .credits-badge{
+    display:none;align-items:center;gap:6px;padding:0 12px;
+    background:var(--red);color:var(--surface);
+    font-family:var(--font);font-weight:900;font-variant-numeric:tabular-nums;
+    border-left:var(--lw) solid var(--ink);
+  }
+  .credits-badge[data-show="1"]{display:flex;}
+  .credits-badge .n{font-size:16px;}
+  .credits-badge .u{font-size:8px;letter-spacing:.06em;text-transform:uppercase;font-family:var(--font-body);font-weight:700;opacity:.9;}
+  .credits-badge.zero{background:var(--surface);color:var(--ink);}
+  .icon-btn{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:40px;border:none;border-left:var(--lw) solid var(--ink);
+    background:var(--ink);color:var(--surface);cursor:pointer;
+  }
+  .icon-btn:hover{background:var(--red);}
+  .icon-btn:focus-visible{outline:2px solid var(--red);outline-offset:-3px;}
+
+  /* ---- corpo ----------------------------------------------------------------------- */
+  .content{flex:1 1 auto;padding:14px;display:flex;flex-direction:column;gap:12px;}
+
+  /* ---- faixa de seção (cabeçalho preto full-width, marca de "biblioteca") --------- */
+  .bar{
+    display:flex;align-items:center;gap:8px;
+    background:var(--ink);color:var(--surface);
+    font-family:var(--font);font-weight:900;text-transform:uppercase;letter-spacing:.02em;
+    font-size:12px;padding:8px 10px;
+  }
+  .bar .tab{width:8px;height:14px;background:var(--red);flex:none;}
+
+  /* ---- loading --------------------------------------------------------------------- */
+  .loading-screen{align-items:center;justify-content:center;text-align:center;gap:14px;flex:1;display:flex;flex-direction:column;padding:40px 16px;}
+  .kicker-track{width:120px;height:8px;border:var(--lw) solid var(--ink);background:var(--surface);overflow:hidden;}
+  .kicker-fill{height:100%;width:40%;background:var(--red);animation:kick 1s cubic-bezier(.6,0,.4,1) infinite;}
+  @keyframes kick{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+  @media (prefers-reduced-motion: reduce){.kicker-fill{animation-duration:2.4s;}}
+  .muted{color:var(--ink);opacity:.62;font-size:12px;}
+  .caps{text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:11px;}
+
+  /* ---- formulários ------------------------------------------------------------------ */
+  label{display:block;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;margin-bottom:5px;}
+  input[type=email],input[type=password],input[type=text]{
+    width:100%;background:var(--surface);border:var(--lw) solid var(--ink);
+    color:var(--ink);font-family:var(--font-body);font-size:14px;padding:9px 10px;border-radius:0;
+  }
+  input::placeholder{color:var(--gray);opacity:1;}
+  input:focus-visible{outline:2px solid var(--red);outline-offset:0;}
+  .field{margin-bottom:12px;}
+  .field-with-toggle{position:relative;}
+  .field-with-toggle input{padding-right:56px;}
+  .toggle-visibility{
+    position:absolute;right:0;top:0;bottom:0;
+    background:var(--ink);color:var(--surface);border:none;
+    font-family:var(--font);font-size:9px;font-weight:900;letter-spacing:.04em;
+    text-transform:uppercase;cursor:pointer;padding:0 10px;
+  }
+  .toggle-visibility:hover{background:var(--red);}
+
+  /* ---- botões (retângulo sólido, sem raio, sem sombra) ------------------------------ */
+  button{border-radius:0;}
+  button.primary{
+    width:100%;background:var(--red);color:var(--surface);border:var(--lw) solid var(--ink);
+    font-family:var(--font);font-weight:900;letter-spacing:.02em;text-transform:uppercase;font-size:13px;
+    padding:11px 12px;cursor:pointer;
+  }
+  button.primary:hover{background:var(--ink);}
+  button.primary:disabled{background:var(--gray-light);color:var(--gray);border-color:var(--gray);cursor:default;}
+  button.secondary{
+    width:100%;background:var(--surface);color:var(--ink);border:var(--lw) solid var(--ink);
+    font-family:var(--font);font-weight:900;text-transform:uppercase;letter-spacing:.02em;font-size:12px;
+    padding:9px 12px;cursor:pointer;
+  }
+  button.secondary:hover{background:var(--ink);color:var(--surface);}
+  button.secondary:disabled{color:var(--gray);border-color:var(--gray);cursor:default;}
+  button.linklike{
+    background:none;border:none;color:var(--ink);font-size:11px;font-family:var(--font-body);font-weight:700;
+    cursor:pointer;padding:4px 0;text-decoration:underline;text-underline-offset:2px;
+  }
+  button.linklike:hover{color:var(--red);}
+  button.danger{
+    width:100%;background:var(--surface);color:var(--red);border:var(--lw) solid var(--red);
+    font-family:var(--font);font-weight:900;text-transform:uppercase;letter-spacing:.02em;font-size:12px;
+    padding:9px 12px;cursor:pointer;
+  }
+  button.danger:hover{background:var(--red);color:var(--surface);}
+  button.danger.confirm{background:var(--red);color:var(--surface);}
+  button.danger.confirm:hover{background:var(--ink);border-color:var(--ink);}
+
+  /* ---- checkbox/radio quadrados (Swiss controls) ------------------------------------ */
+  .swiss-check{
+    -webkit-appearance:none;appearance:none;width:20px;height:20px;flex:none;
+    border:var(--lw) solid var(--ink);background:var(--surface);cursor:pointer;position:relative;
+  }
+  .swiss-check:checked{background:var(--ink);}
+  .swiss-check:checked::after{
+    content:"";position:absolute;left:5px;top:1px;width:6px;height:11px;
+    border:solid var(--red);border-width:0 3px 3px 0;transform:rotate(45deg);
+  }
+  .swiss-check:focus-visible{outline:2px solid var(--red);outline-offset:2px;}
+
+  /* ---- banners: sem preenchimento suave, bloco com borda + tag ---------------------- */
+  .banner{border:var(--lw) solid var(--ink);background:var(--surface);display:flex;gap:0;align-items:stretch;font-size:12px;}
+  .banner .tag{
+    flex:none;width:34px;display:flex;align-items:center;justify-content:center;
+    background:var(--ink);color:var(--surface);
+  }
+  .banner-error .tag{background:var(--red);}
+  .banner-warn .tag{background:var(--ink);}
+  .banner .msg{flex:1;padding:9px 10px;display:flex;align-items:center;gap:8px;}
+  .banner .msg span:first-child{flex:1;}
+  .banner button.linklike{white-space:nowrap;}
+
+  /* ---- marca de login ---------------------------------------------------------------- */
+  .login-mark{display:flex;flex-direction:column;align-items:center;gap:10px;padding:22px 0 8px;}
+  .login-mark .badge{
+    width:56px;height:56px;background:var(--ink);color:var(--surface);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font);font-size:20px;font-weight:900;
+    border:var(--lw) solid var(--ink);
+  }
+  .login-mark .title{font-family:var(--font);font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:.02em;}
+
+  /* ---- empty state / detectar (4.2) -------------------------------------------------- */
+  .empty-state{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;gap:8px;padding:30px 14px;border:var(--lw) solid var(--ink);background:var(--surface);
+  }
+  .empty-state .icon{width:44px;height:44px;color:var(--gray);margin-bottom:2px;}
+  .empty-state.selected .icon{color:var(--red);}
+  .empty-state .title{font-family:var(--font);font-weight:900;text-transform:uppercase;font-size:13px;letter-spacing:.01em;}
+  .empty-state .body{opacity:.65;font-size:12px;max-width:26ch;}
+  .account-line{font-size:11px;text-align:center;font-weight:700;letter-spacing:.01em;}
+  .account-line .email{font-family:var(--font-body);font-weight:400;opacity:.7;}
+
+  /* ---- detectando (4.3) --------------------------------------------------------------- */
+  .preview-thumb{max-width:100%;max-height:150px;border:var(--lw) solid var(--ink);display:block;margin:0 auto;}
+
+  /* ---- tela de seleção (4.4) ------------------------------------------------------------ */
+  .overlay-wrap{position:relative;border:var(--lw) solid var(--ink);background:var(--surface);}
+  .overlay-wrap img{display:block;width:100%;height:auto;}
+  .box{position:absolute;pointer-events:none;transition:opacity .15s;box-sizing:border-box;}
+  .box .tag{
+    position:absolute;top:-2px;left:-2px;min-width:18px;height:18px;padding:0 4px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font);font-size:10px;font-weight:900;color:var(--surface);
+  }
+  .box.dimmed{opacity:.3;}
+  .checklist{display:flex;flex-direction:column;gap:0;max-height:210px;overflow-y:auto;border:var(--lw) solid var(--ink);border-bottom:none;}
+  .check-row{
+    display:flex;align-items:center;gap:8px;padding:8px 9px;
+    border-bottom:var(--lw) solid var(--ink);background:var(--surface);cursor:pointer;
+  }
+  .check-row:hover{background:var(--gray-light);}
+  .check-row .num{
+    flex:none;width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font);font-size:10.5px;font-weight:900;color:var(--surface);
+  }
+  .check-row .label{flex:1;font-size:12.5px;font-weight:700;}
+  .select-footer{display:flex;flex-direction:column;gap:8px;}
+  .select-count{font-size:11px;text-align:center;font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
+  .select-count .note{display:block;margin-top:2px;font-weight:400;text-transform:none;opacity:.65;letter-spacing:0;}
+
+  /* ---- barra de progresso (bloco sólido, sem raio) -------------------------------------- */
+  .progress-bar-outer{height:12px;border:var(--lw) solid var(--ink);background:var(--surface);overflow:hidden;}
+  .progress-bar-inner{height:100%;background:var(--red);transition:width .2s;}
+
+  /* ---- extraindo / resultado: tabela de dados (referência "DATA TABLE") ----------------- */
+  .dtable{border:var(--lw) solid var(--ink);border-collapse:collapse;width:100%;font-size:12px;}
+  .dtable thead th{
+    background:var(--ink);color:var(--surface);text-align:left;padding:7px 8px;
+    font-family:var(--font);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.03em;
+  }
+  .dtable tbody td{padding:7px 8px;border-top:var(--lw) solid var(--ink);vertical-align:middle;}
+  .dtable tbody tr:nth-child(even){background:var(--gray-light);}
+  .dtable .stage{font-weight:700;text-transform:uppercase;font-size:10.5px;letter-spacing:.02em;}
+  .dtable tr.done .stage{color:var(--ink);}
+  .dtable tr.failed .stage{color:var(--red);}
+  .dtable .mark{width:16px;height:16px;display:inline-block;vertical-align:-3px;}
+  .result-summary{font-size:12px;text-align:center;font-weight:700;}
+
+  /* ---- erro / créditos zero (4.7 / 4.8) --------------------------------------------------- */
+  .full-message{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:26px 16px;}
+  .full-message .icon-block{width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:var(--lw) solid var(--ink);}
+  .full-message.error .icon-block{background:var(--red);}
+  .full-message.error .icon-block svg{color:var(--surface);}
+  .full-message.credits .icon-block{background:var(--ink);}
+  .full-message.credits .icon-block svg{color:var(--surface);}
+  .full-message .title{font-family:var(--font);font-weight:900;text-transform:uppercase;font-size:15px;letter-spacing:.01em;}
+  .full-message .body{opacity:.7;font-size:12px;max-width:28ch;}
+  .full-message .actions{width:100%;display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+  details.tech{width:100%;font-size:11px;opacity:.65;}
+  details.tech summary{cursor:pointer;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.03em;}
+  details.tech pre{white-space:pre-wrap;word-break:break-word;text-align:left;background:var(--surface);border:var(--lw) solid var(--ink);padding:8px;margin-top:6px;}
+
+  /* ---- configurações ------------------------------------------------------------------------ */
+  .settings-header{display:flex;align-items:stretch;gap:0;margin:-14px -14px 12px;background:var(--ink);}
+  .settings-header .icon-btn{border-left:none;border-right:var(--lw) solid var(--surface);}
+  .settings-header .title{
+    flex:1;color:var(--surface);display:flex;align-items:center;padding:0 10px;
+    font-family:var(--font);font-weight:900;text-transform:uppercase;font-size:13px;letter-spacing:.02em;
+  }
+  .help-text{font-size:11px;opacity:.65;margin:-6px 0 10px;}
+  .lang-row{display:flex;border:var(--lw) solid var(--ink);margin-bottom:14px;}
+  .lang-row button{
+    flex:1;background:var(--surface);border:none;color:var(--ink);
+    font-family:var(--font);font-weight:900;font-size:12px;padding:8px 0;cursor:pointer;
+  }
+  .lang-row button+button{border-left:var(--lw) solid var(--ink);}
+  .lang-row button.active{background:var(--red);color:var(--surface);}
+  .divider{border-top:var(--lw) solid var(--ink);margin:14px 0;}
+  .saved-note{font-size:11px;font-weight:700;color:var(--red);margin-top:6px;text-transform:uppercase;letter-spacing:.02em;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand"><span class="tab" aria-hidden="true"></span><span data-i18n="me.app.title">Mantos Extract</span></div>
+    <div class="topbar-right">
+      <span id="creditsBadge" class="credits-badge"><span class="n"></span><span class="u" data-i18n="me.home.credits.unit">créd.</span></span>
+      <button id="settingsBtn" class="icon-btn" type="button" data-i18n-title="me.home.settings.button" title="Configurações" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="content" id="contentWrap">
+
+    <!-- 0: loading -->
+    <section id="screen-loading" class="loading-screen">
+      <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
+      <div class="muted caps" data-i18n="me.common.loading">Carregando...</div>
+    </section>
+
+    <!-- 4.1: login -->
+    <section id="screen-login" hidden>
+      <div class="login-mark reg">
+        <div class="badge" aria-hidden="true">ME</div>
+        <div class="title" data-i18n="me.app.title">Mantos Extract</div>
+      </div>
+
+      <div id="loginError" class="banner banner-error" hidden>
+        <span class="tag" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </span>
+        <span class="msg"><span id="loginErrorText"></span></span>
+      </div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label for="loginEmail" data-i18n="me.login.email.placeholder">E-mail</label>
+          <input id="loginEmail" type="email" autocomplete="username" data-i18n-placeholder="me.login.email.placeholder">
+        </div>
+        <div class="field">
+          <label for="loginPassword" data-i18n="me.login.password.placeholder">Senha</label>
+          <div class="field-with-toggle">
+            <input id="loginPassword" type="password" autocomplete="current-password" data-i18n-placeholder="me.login.password.placeholder">
+            <button type="button" id="togglePassword" class="toggle-visibility" data-i18n="me.login.password.show">Ver</button>
+          </div>
+        </div>
+        <button type="submit" id="loginSubmit" class="primary" data-i18n="me.login.submit">Entrar</button>
+      </form>
+
+      <div style="text-align:center;margin-top:12px;">
+        <button type="button" class="linklike" data-i18n="me.login.forgot">Esqueci minha senha</button>
+      </div>
+    </section>
+
+    <!-- 4.2: empty state / entrada de detecção -->
+    <section id="screen-home" hidden style="flex:1;display:flex;flex-direction:column;gap:12px;">
+      <div id="homeWarning" class="banner banner-warn" hidden>
+        <span class="tag" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3 2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
+        </span>
+        <span class="msg"><span id="homeWarningText"></span><button type="button" id="homeWarningDismiss" class="linklike" data-i18n="me.home.warning.dismiss">Entendi</button></span>
+      </div>
+      <div id="homeError" class="banner banner-error" hidden>
+        <span class="tag" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </span>
+        <span class="msg"><span id="homeErrorText"></span></span>
+      </div>
+
+      <div class="account-line"><span class="email" id="homeEmail"></span></div>
+
+      <div id="homeEmptyState" class="empty-state reg">
+        <svg id="homeEmptyGlyph" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="14" rx="0"/><circle cx="9" cy="10" r="2"/><path d="M3 15l5-4 4 4 3-2 6 5"/>
+        </svg>
+        <div class="title" id="homeEmptyTitle" data-i18n="me.detect.emptyState.title">Selecione uma imagem</div>
+        <div class="body" id="homeEmptyBody" data-i18n="me.detect.emptyState.body">Clique numa imagem no seu documento, depois clique aqui embaixo.</div>
+      </div>
+
+      <button type="button" id="detectBtn" class="primary" disabled data-i18n="me.detect.button">Detectar</button>
+    </section>
+
+    <!-- 4.3: detectando -->
+    <section id="screen-detecting" hidden class="loading-screen">
+      <img id="detectingThumb" class="preview-thumb" alt="" hidden>
+      <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
+      <div class="muted caps" id="detectingStage" data-i18n="me.detect.progress.exporting">Exportando imagem...</div>
+    </section>
+
+    <!-- 4.4: seleção -->
+    <section id="screen-select" hidden style="flex:1;display:flex;flex-direction:column;gap:10px;">
+      <div class="overlay-wrap">
+        <img id="selectImage" alt="">
+        <div id="selectBoxes"></div>
+      </div>
+
+      <div id="selectNone" class="muted" data-i18n="me.select.none" hidden>Nenhum elemento detectado nesta imagem.</div>
+      <div id="selectChecklist" class="checklist"></div>
+
+      <div class="select-footer">
+        <div class="select-count">
+          <span id="selectedCount"></span>
+          <span id="creditNote" class="note"></span>
+        </div>
+        <button type="button" id="extractBtn" class="primary" disabled data-i18n="me.select.extractButton">Extrair (0)</button>
+        <button type="button" id="selectBackBtn" class="secondary" data-i18n="me.select.backButton">Selecionar outra imagem</button>
+      </div>
+    </section>
+
+    <!-- 4.5: extraindo -->
+    <section id="screen-extracting" hidden style="flex:1;display:flex;flex-direction:column;gap:10px;">
+      <div class="bar"><span class="tab" aria-hidden="true"></span><span data-i18n="me.extract.title">Extraindo elementos</span></div>
+      <div class="progress-bar-outer"><div class="progress-bar-inner" id="extractBarInner" style="width:0%"></div></div>
+      <div style="overflow-x:auto;">
+        <table class="dtable">
+          <thead><tr>
+            <th data-i18n="me.table.element">Elemento</th>
+            <th data-i18n="me.table.status">Status</th>
+          </tr></thead>
+          <tbody id="extractProgressList"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4.6: resultado -->
+    <section id="screen-result" hidden style="flex:1;display:flex;flex-direction:column;gap:10px;">
+      <div class="bar"><span class="tab" aria-hidden="true"></span><span data-i18n="me.extract.result.title">Elementos extraídos</span></div>
+      <div style="overflow-x:auto;">
+        <table class="dtable">
+          <thead><tr>
+            <th data-i18n="me.table.element">Elemento</th>
+            <th data-i18n="me.table.status">Status</th>
+          </tr></thead>
+          <tbody id="resultList"></tbody>
+        </table>
+      </div>
+      <div class="result-summary" id="resultSummary"></div>
+      <div id="resultSkippedNote" class="banner banner-warn" hidden>
+        <span class="tag" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3 2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
+        </span>
+        <span class="msg"><span id="resultSkippedText"></span></span>
+      </div>
+      <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
+      <button type="button" id="resultNewImageBtn" class="primary" data-i18n="me.extract.result.newImage">Extrair outra imagem</button>
+    </section>
+
+    <!-- 4.7: erro de rede -->
+    <section id="screen-error" hidden class="full-message error">
+      <div class="icon-block" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><circle cx="12" cy="16" r=".7" fill="currentColor"/></svg>
+      </div>
+      <div class="title" data-i18n="me.error.network.title">Não conseguimos conectar</div>
+      <div class="body" id="errorBody" data-i18n="me.error.network.body">Verifique sua internet e tente de novo.</div>
+      <div class="actions">
+        <button type="button" id="errorRetryBtn" class="primary" data-i18n="me.common.retry">Tentar de novo</button>
+      </div>
+      <details class="tech">
+        <summary data-i18n="me.common.details">ver detalhes técnicos</summary>
+        <pre id="errorTechDetails"></pre>
+      </details>
+    </section>
+
+    <!-- 4.8: créditos zero -->
+    <section id="screen-credits-zero" hidden class="full-message credits">
+      <div class="icon-block" aria-hidden="true">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="3" width="10" height="18" rx="1.5"/></svg>
+      </div>
+      <div class="title" data-i18n="me.credits.zero.title">Seus créditos acabaram</div>
+      <div class="body" data-i18n="me.credits.zero.body">Fale com sua confecção para liberar mais créditos.</div>
+      <div class="body" style="font-size:11px;" data-i18n="me.credits.zero.contact"></div>
+      <div class="actions">
+        <button type="button" id="creditsZeroBackBtn" class="secondary" data-i18n="me.select.backButton">Selecionar outra imagem</button>
+      </div>
+    </section>
+
+    <!-- configurações -->
+    <section id="screen-settings" hidden>
+      <div class="settings-header">
+        <button type="button" id="settingsBack" class="icon-btn" data-i18n-title="me.settings.back" title="Voltar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </button>
+        <span class="title" data-i18n="me.settings.title">Configurações</span>
+      </div>
+
+      <label data-i18n="me.settings.language.label">Idioma</label>
+      <div class="lang-row" id="langRow">
+        <button type="button" data-lang="pt">PT</button>
+        <button type="button" data-lang="es">ES</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <label for="openaiKey" data-i18n="me.settings.openai.label">Chave da OpenAI</label>
+      <p class="help-text" data-i18n="me.settings.openai.help">Sua confecção usa a própria chave da OpenAI para detectar e extrair as imagens. Cole aqui uma vez só.</p>
+      <div class="field">
+        <input id="openaiKey" type="password" data-i18n-placeholder="me.settings.openai.placeholder" placeholder="sk-...">
+      </div>
+      <button type="button" id="saveOpenAiKey" class="secondary" data-i18n="me.settings.openai.save">Salvar chave</button>
+      <div id="openaiSaved" class="saved-note" hidden data-i18n="me.settings.openai.saved">Chave salva.</div>
+
+      <div class="divider"></div>
+
+      <div id="logoutConfirm" hidden>
+        <p class="help-text" data-i18n="me.settings.logout.confirm">Sair da sua conta neste computador?</p>
+        <div style="display:flex;gap:8px;">
+          <button type="button" id="logoutCancel" class="secondary" data-i18n="me.settings.back">Voltar</button>
+          <button type="button" id="logoutConfirmBtn" class="danger confirm" data-i18n="me.settings.logout">Sair</button>
+        </div>
+      </div>
+      <button type="button" id="logoutBtn" class="danger" data-i18n="me.settings.logout">Sair</button>
+    </section>
+
+  </div>
+</div>
+
+<!-- DEV-ONLY: preview-mock.js nunca é embarcado no produto (só index.html está listado como
+     <EmbeddedResource> em MantosExtract.AddIn.csproj) — em produção esta tag dá um 404
+     silencioso, sem efeito nenhum. Ver CHANGELOG.md ("modo preview") pro porquê é seguro. -->
+<script src="preview-mock.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---- host bridge -------------------------------------------------------
+  var host = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
+  function send(obj){
+    if (window.__mantosExtractPreview) { window.__mantosExtractPreview.receive(obj); return; }
+    if (host) host.postMessage(obj);
+  }
+
+  // A JS exception here used to be completely invisible (Optimus O18) — one missing helper
+  // silently broke every render function for weeks. Report every uncaught error to the host log.
+  window.onerror = function(message, source, lineno, colno){
+    try { send({cmd:"jsError", message: String(message) + " @" + source + ":" + lineno + ":" + colno}); } catch(e){}
+    return false;
+  };
+
+  function T(key){
+    var s = (window.MANTOSEXTRACT_I18N && window.MANTOSEXTRACT_I18N[key]) || key;
+    for (var i=1;i<arguments.length;i++) s = s.split("{"+(i-1)+"}").join(String(arguments[i]));
+    return s;
+  }
+  function $(id){ return document.getElementById(id); }
+  function show(id){ $(id).hidden = false; }
+  function hide(id){ $(id).hidden = true; }
+
+  var SCREENS = ["screen-loading","screen-login","screen-home","screen-detecting","screen-select",
+                 "screen-extracting","screen-result","screen-error","screen-credits-zero","screen-settings"];
+  function showScreen(id){
+    SCREENS.forEach(function(s){ $(s).hidden = (s !== id); });
+  }
+
+  // Vocabulário de marcação Swiss: só preto/vermelho, diferenciados por PADRÃO de traço +
+  // número (nunca uma paleta de 6 matizes) — acessível a daltonismo e no espírito do
+  // sistema de referência (números como peça gráfica, não decoração de cor).
+  var TAG_STYLES = [
+    {bg:"var(--red)",   border:"solid"},
+    {bg:"var(--ink)",   border:"solid"},
+    {bg:"var(--red-dark)", border:"dashed"},
+    {bg:"var(--gray)",  border:"dashed"},
+  ];
+
+  // ---- app state ------------------------------------------------------------
+  var state = {
+    selIsBitmap: false,
+    lastDetection: null,      // {imageUrl, elements:[{id,label,xMin,yMin,xMax,yMax}]}
+    confirmedIds: [],         // ids the operator checked on screen-select
+    extractProgress: {},      // id -> {label, stage, ok}
+    lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
+  };
+
+  // ---- credits badge ------------------------------------------------------
+  function renderCredits(n){
+    var badge = $("creditsBadge");
+    badge.querySelector(".n").textContent = n;
+    badge.classList.toggle("zero", n <= 0);
+    badge.setAttribute("data-show", "1");
+    $("settingsBtn").hidden = false;
+  }
+
+  // ---- auth screens ---------------------------------------------------------
+  function renderLogin(error){
+    if (error) { $("loginErrorText").textContent = error; show("loginError"); }
+    else hide("loginError");
+    $("creditsBadge").removeAttribute("data-show");
+    $("settingsBtn").hidden = true;
+    showScreen("screen-login");
+    setLoginBusy(false);
+  }
+
+  function renderHome(msg){
+    $("homeEmail").textContent = msg.email || "";
+    renderCredits(msg.credits || 0);
+    if (msg.warning) { $("homeWarningText").textContent = msg.warning; show("homeWarning"); }
+    else hide("homeWarning");
+    hide("homeError");
+    updateHomeEmptyState();
+    showScreen("screen-home");
+  }
+
+  function setLoginBusy(busy){
+    $("loginSubmit").disabled = busy;
+    $("loginSubmit").textContent = busy ? T("me.login.submitting") : T("me.login.submit");
+  }
+
+  function updateHomeEmptyState(){
+    var title = $("homeEmptyTitle"), body = $("homeEmptyBody"), box = $("homeEmptyState");
+    box.classList.toggle("selected", !!state.selIsBitmap);
+    if (state.selIsBitmap) {
+      title.removeAttribute("data-i18n");
+      title.textContent = T("me.detect.ready.title");
+      body.removeAttribute("data-i18n");
+      body.textContent = "";
+    } else {
+      title.setAttribute("data-i18n", "me.detect.emptyState.title");
+      body.setAttribute("data-i18n", "me.detect.emptyState.body");
+      window.applyI18n(box);
+    }
+    $("detectBtn").disabled = !state.selIsBitmap;
+  }
+
+  // ---- receive from C# -----------------------------------------------------
+  window.mantosExtractReceive = function(msg){
+    if (!msg || !msg.type) return;
+    switch (msg.type) {
+      case "auth":
+        if (msg.screen === "home") renderHome(msg);
+        else renderLogin(msg.error);
+        break;
+      case "openaiKey":
+        if (msg.ok) { show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500); }
+        break;
+      case "status":
+        onStatus(msg);
+        break;
+      case "credits":
+        renderCredits(msg.credits || 0);
+        break;
+      case "detectProgress":
+        $("detectingStage").setAttribute("data-i18n", "me.detect.progress." + msg.stage);
+        window.applyI18n($("detectingStage").parentElement);
+        break;
+      case "detect":
+        onDetect(msg);
+        break;
+      case "extractProgress":
+        onExtractProgress(msg);
+        break;
+      case "extract":
+        onExtractDone(msg);
+        break;
+      case "busy":
+        break;
+    }
+  };
+
+  function onStatus(msg){
+    var wasBitmap = state.selIsBitmap;
+    state.selIsBitmap = !!msg.selIsBitmap;
+    // Only the home screen reacts live to selection changes — mid-flow screens (detecting,
+    // select, extracting, result) ignore the heartbeat so a stray click elsewhere in Corel
+    // never yanks the operator out of what they were doing.
+    if (!$("screen-home").hidden && wasBitmap !== state.selIsBitmap) updateHomeEmptyState();
+  }
+
+  // ---- detect flow (Fase 2) ------------------------------------------------
+
+  $("detectBtn").addEventListener("click", function(){
+    showScreen("screen-detecting");
+    $("detectingThumb").hidden = true;
+    send({cmd:"detect"});
+  });
+
+  function onDetect(msg){
+    if (!msg.ok) {
+      handleActionError(msg, function(){
+        $("homeErrorText").textContent = msg.error || T("me.common.error.unknown");
+        show("homeError");
+        showScreen("screen-home");
+      });
+      return;
+    }
+
+    state.lastDetection = msg;
+    state.confirmedIds = [];
+    renderSelectScreen();
+  }
+
+  function renderSelectScreen(){
+    var det = state.lastDetection;
+    $("selectImage").src = det.imageUrl;
+
+    var boxesEl = $("selectBoxes");
+    boxesEl.innerHTML = "";
+    var listEl = $("selectChecklist");
+    listEl.innerHTML = "";
+
+    $("selectNone").hidden = det.elements.length > 0;
+
+    det.elements.forEach(function(el, i){
+      var style = TAG_STYLES[i % TAG_STYLES.length];
+      var tagText = String(i + 1).padStart(2, "0");
+
+      var boxEl = document.createElement("div");
+      boxEl.className = "box";
+      boxEl.style.border = "3px " + style.border + " " + style.bg;
+      boxEl.style.left = (el.xMin/10) + "%";
+      boxEl.style.top = (el.yMin/10) + "%";
+      boxEl.style.width = ((el.xMax-el.xMin)/10) + "%";
+      boxEl.style.height = ((el.yMax-el.yMin)/10) + "%";
+      boxEl.dataset.id = el.id;
+      var boxTag = document.createElement("span");
+      boxTag.className = "tag";
+      boxTag.style.background = style.bg;
+      boxTag.textContent = tagText;
+      boxEl.appendChild(boxTag);
+      boxesEl.appendChild(boxEl);
+
+      var row = document.createElement("label");
+      row.className = "check-row";
+      var num = document.createElement("span");
+      num.className = "num";
+      num.style.background = style.bg;
+      num.textContent = tagText;
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.className = "swiss-check";
+      cb.dataset.id = el.id;
+      cb.addEventListener("change", onChecklistChange);
+      var lbl = document.createElement("span");
+      lbl.className = "label";
+      lbl.textContent = el.label;
+      row.appendChild(num); row.appendChild(cb); row.appendChild(lbl);
+      row.addEventListener("mouseenter", function(){ highlightBox(el.id, true); });
+      row.addEventListener("mouseleave", function(){ highlightBox(el.id, false); });
+      listEl.appendChild(row);
+    });
+
+    updateSelectFooter();
+    showScreen("screen-select");
+  }
+
+  function highlightBox(id, on){
+    Array.prototype.forEach.call($("selectBoxes").children, function(b){
+      b.classList.toggle("dimmed", on && b.dataset.id !== id);
+    });
+  }
+
+  function onChecklistChange(){
+    var id = this.dataset.id;
+    if (this.checked) { if (state.confirmedIds.indexOf(id) < 0) state.confirmedIds.push(id); }
+    else state.confirmedIds = state.confirmedIds.filter(function(x){ return x !== id; });
+    updateSelectFooter();
+  }
+
+  function updateSelectFooter(){
+    var n = state.confirmedIds.length;
+    $("selectedCount").textContent = T("me.select.selectedCount", n);
+    $("creditNote").textContent = n > 0 ? T("me.select.creditNote", n) : "";
+    $("extractBtn").disabled = n === 0;
+    $("extractBtn").textContent = T("me.select.extractButton", n);
+  }
+
+  $("selectBackBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
+
+  // ---- extract flow (Fases 3-4) --------------------------------------------
+
+  $("extractBtn").addEventListener("click", function(){ beginExtraction(state.confirmedIds); });
+
+  function beginExtraction(ids){
+    state.extractProgress = {};
+    var listEl = $("extractProgressList");
+    listEl.innerHTML = "";
+    ids.forEach(function(id){
+      var el = findDetected(id);
+      var row = document.createElement("tr");
+      row.id = "progress-" + id;
+      var nameCell = document.createElement("td");
+      nameCell.textContent = el ? el.label : id;
+      var stateCell = document.createElement("td");
+      stateCell.className = "stage";
+      stateCell.textContent = T("me.extract.progress.queued");
+      row.appendChild(nameCell); row.appendChild(stateCell);
+      listEl.appendChild(row);
+      state.extractProgress[id] = { label: el ? el.label : id, stage: "queued", ok: null };
+    });
+    $("extractBarInner").style.width = "0%";
+    showScreen("screen-extracting");
+    send({cmd:"extract", ids: ids});
+  }
+
+  function findDetected(id){
+    if (!state.lastDetection) return null;
+    for (var i=0;i<state.lastDetection.elements.length;i++)
+      if (state.lastDetection.elements[i].id === id) return state.lastDetection.elements[i];
+    return null;
+  }
+
+  function onExtractProgress(msg){
+    var p = state.extractProgress[msg.id];
+    if (!p) return;
+    p.stage = msg.stage;
+    if (msg.stage === "done") p.ok = !!msg.ok;
+
+    var row = $("progress-" + msg.id);
+    if (!row) return;
+    var stateCell = row.querySelector(".stage");
+    if (msg.stage === "done") {
+      row.className = msg.ok ? "done" : "failed";
+      stateCell.textContent = T(msg.ok ? "me.extract.progress.done" : "me.extract.progress.failed");
+    } else {
+      stateCell.textContent = T("me.extract.progress." + msg.stage);
+    }
+
+    var total = msg.total || 1;
+    var doneCount = 0;
+    Object.keys(state.extractProgress).forEach(function(id){ if (state.extractProgress[id].ok !== null) doneCount++; });
+    $("extractBarInner").style.width = Math.round((doneCount/total)*100) + "%";
+  }
+
+  function onExtractDone(msg){
+    var listEl = $("resultList");
+    listEl.innerHTML = "";
+    state.lastFailedIds = [];
+
+    Object.keys(state.extractProgress).forEach(function(id){
+      var p = state.extractProgress[id];
+      var row = document.createElement("tr");
+      row.className = p.ok ? "done" : "failed";
+      var nameCell = document.createElement("td");
+      nameCell.textContent = p.label;
+      var statusCell = document.createElement("td");
+      statusCell.className = "stage";
+      statusCell.textContent = T(p.ok ? "me.extract.progress.done" : "me.extract.progress.failed");
+      row.appendChild(nameCell); row.appendChild(statusCell);
+      listEl.appendChild(row);
+      if (!p.ok) state.lastFailedIds.push(id);
+    });
+
+    $("resultSummary").textContent = T("me.extract.result.summary", msg.succeeded || 0,
+      (msg.succeeded||0) + (msg.failed||0) + (msg.skippedNoCredits||0));
+
+    if (msg.skippedNoCredits > 0) {
+      $("resultSkippedText").textContent = T("me.extract.result.skippedNoCredits", msg.skippedNoCredits);
+      show("resultSkippedNote");
+    } else hide("resultSkippedNote");
+
+    $("resultRetryFailedBtn").hidden = state.lastFailedIds.length === 0;
+    showScreen("screen-result");
+  }
+
+  $("resultRetryFailedBtn").addEventListener("click", function(){ beginExtraction(state.lastFailedIds.slice()); });
+  $("resultNewImageBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
+  $("creditsZeroBackBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
+  $("errorRetryBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
+
+  // ---- shared error routing --------------------------------------------------
+  // detect/extract failures land on one of three places depending on the server's code:
+  // out of credits -> 4.8, network -> 4.7 (with raw detail collapsed), anything else -> an
+  // inline banner via the caller's own fallback (never leaves the operator on a blank screen).
+  function handleActionError(msg, fallback){
+    if (msg.code === "E_NO_CREDITS") { showScreen("screen-credits-zero"); return; }
+    if (msg.code === "E_NETWORK") {
+      $("errorBody").textContent = msg.error || T("me.error.network.body");
+      $("errorTechDetails").textContent = msg.code + ": " + (msg.error || "");
+      showScreen("screen-error");
+      return;
+    }
+    fallback();
+  }
+
+  // ---- login form ------------------------------------------------------
+  $("loginForm").addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var email = $("loginEmail").value.trim();
+    var password = $("loginPassword").value;
+    if (!email) { renderLogin(T("me.login.error.emailRequired")); $("loginEmail").focus(); return; }
+    if (!password) { renderLogin(T("me.login.error.passwordRequired")); $("loginPassword").focus(); return; }
+    hide("loginError");
+    setLoginBusy(true);
+    send({cmd:"login", email: email, password: password});
+  });
+
+  $("togglePassword").addEventListener("click", function(){
+    var field = $("loginPassword");
+    var toShow = field.type === "password";
+    field.type = toShow ? "text" : "password";
+    this.textContent = T(toShow ? "me.login.password.hide" : "me.login.password.show");
+  });
+
+  // ---- settings navigation -----------------------------------------------
+  $("settingsBtn").addEventListener("click", function(){
+    $("openaiKey").value = "";
+    hide("logoutConfirm");
+    show("logoutBtn");
+    showScreen("screen-settings");
+  });
+  $("settingsBack").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
+
+  Array.prototype.forEach.call($("langRow").querySelectorAll("button"), function(btn){
+    btn.classList.toggle("active", btn.getAttribute("data-lang") === window.MANTOSEXTRACT_LANG_KEY);
+    btn.addEventListener("click", function(){ send({cmd:"idioma", tag: btn.getAttribute("data-lang")}); });
+  });
+
+  $("saveOpenAiKey").addEventListener("click", function(){
+    send({cmd:"saveOpenAiKey", key: $("openaiKey").value.trim()});
+  });
+
+  $("logoutBtn").addEventListener("click", function(){ hide("logoutBtn"); show("logoutConfirm"); });
+  $("logoutCancel").addEventListener("click", function(){ hide("logoutConfirm"); show("logoutBtn"); });
+  $("logoutConfirmBtn").addEventListener("click", function(){ showScreen("screen-loading"); send({cmd:"logout"}); });
+
+  $("homeWarningDismiss").addEventListener("click", function(){ hide("homeWarning"); });
+
+  // ---- boot ---------------------------------------------------------------
+  document.addEventListener("DOMContentLoaded", function(){
+    if (window.applyI18n) window.applyI18n();
+    send({cmd:"bootstrap"});
+    [0,300,1000,2500].forEach(function(ms){ setTimeout(function(){ send({cmd:"status"}); }, ms); });
+    setInterval(function(){ send({cmd:"status"}); }, 2500);
+  });
+})();
+</script>
+</body>
+</html>

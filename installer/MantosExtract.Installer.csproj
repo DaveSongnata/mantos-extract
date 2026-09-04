@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MantosExtract installer — PLACEHOLDER (Fase 5, see plans/Phase_5.md). Real content mirrors
+    optimus/installer/Optimus.Installer.csproj: WinForms host for a WebView2 wizard UI, copies
+    the addon payload into every CorelDRAW's Programs64\Addons\MantosExtract\, ILRepack on
+    Release for a single EXE. None of that exists yet — Fase 1's VM deploy is a manual copy
+    (see plans/Phase_1.md VALIDATION). This project exists now only so the .sln's project set
+    matches the target solution shape from day one (spec §0.1: copy Optimus's structure).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MantosExtract.Installer</RootNamespace>
+    <AssemblyName>MantosExtract_Setup</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
