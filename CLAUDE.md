@@ -45,6 +45,18 @@ Plano: `plans/index.md` + `plans/Phase_1..5.md`.
    **Nunca confundir com `LicenseClient.cs`/HWID+Ed25519 do SisCut** — aquilo é licença de
    desktop do addin SisCut, sistema propositalmente separado (fora de escopo aqui).
 
+## Acesso ao produto — gate `accessMantosExtract` (mantosfc, decisão do Dave 2026-09-04)
+
+O mantosfc (não este repo) decide QUEM pode usar o Mantos Extract, por plano (padrão) ou por
+pessoa (override, admin em `/admin/mantos-extract` ou na ficha do usuário) —
+`PermissionResolver.resolve(user).accessMantosExtract`, checado nos dois endpoints
+(`requireMantosExtractAccess`) antes de qualquer outra coisa. Sem acesso = `403 E_PLAN`. **O
+cliente C# não precisa de nenhum tratamento especial pra esse código** —
+`DetectionClient`/`ExtractionClient.BuildError` já sobrescreve a mensagem genérica por status
+com o `message` que o servidor manda no corpo, então a frase amigável do backend
+("Seu plano não inclui acesso ao Mantos Extract...") já chega pronta pro operador, do mesmo
+jeito que `E_NO_CREDITS`/`E_MISSING_OPENAI_KEY` já chegavam.
+
 ## Créditos (decisão do Dave 2026-09-03)
 
 **Detecção TAMBÉM debita 1 crédito**, não só a extração confirmada — leitura literal do

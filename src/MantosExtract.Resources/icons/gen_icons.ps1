@@ -79,4 +79,28 @@ $bw.Flush()
 [System.IO.File]::WriteAllBytes((Join-Path $outDir 'mantosextract.ico'), $ms.ToArray())
 $bw.Dispose(); $ms.Dispose()
 
+# login-mark.png: core crop, fundo transparente (key-out com feather de anti-aliasing), usado
+# como <img> inline (base64) na tela de login do addin (src/MantosExtract.AddIn/wwwroot/index.html,
+# .login-mark img) — o texto "login-mark" NÃO é a badge do Windows, é o mark web-facing.
+$src2 = [System.Drawing.Image]::FromFile($srcPath)
+$markBmp = New-CroppedResize $src2 $coreBox 160
+$src2.Dispose()
+$bg = $markBmp.GetPixel(2, 2)
+$t1 = 18.0; $t2 = 42.0
+for ($y = 0; $y -lt $markBmp.Height; $y++) {
+  for ($x = 0; $x -lt $markBmp.Width; $x++) {
+    $p = $markBmp.GetPixel($x, $y)
+    $dr = $p.R - $bg.R; $dg = $p.G - $bg.G; $db = $p.B - $bg.B
+    $dist = [Math]::Sqrt($dr*$dr + $dg*$dg + $db*$db)
+    if ($dist -le $t1) {
+      $markBmp.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(0, $p.R, $p.G, $p.B))
+    } elseif ($dist -lt $t2) {
+      $a = [int](255.0 * ($dist - $t1) / ($t2 - $t1))
+      $markBmp.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($a, $p.R, $p.G, $p.B))
+    }
+  }
+}
+$markBmp.Save((Join-Path $outDir 'login-mark.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+$markBmp.Dispose()
+
 Write-Output "Generated MantosExtract icons in $outDir"

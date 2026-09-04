@@ -6,6 +6,27 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-04 — Logo na tela de login + remoção de "Esqueci minha senha"
+
+Dave notou que a marca aparecia no instalador e no ícone do addin no Corel, mas não na tela de
+login — o `.login-mark .badge` ainda era um placeholder de texto ("ME" num quadrado preto),
+nunca trocado quando o ícone real foi conectado. Corrigido: `gen_icons.ps1` agora também gera
+`login-mark.png` (mesmo recorte "core" do glifo central usado no `.ico`, 160px, fundo
+recortado pra transparente com uma faixa de anti-aliasing suave em vez de um corte duro) e o
+`index.html` embute esse PNG como `data:` URI direto no `<img>` — mantém a regra "HTML
+autocontido, sem CDN, sem arquivo externo" (não virou um segundo `EmbeddedResource` no
+`.csproj`, só inline no HTML que já é o único arquivo embutido).
+
+Também removido o botão "Esqueci minha senha" da tela de login (e as 3 chaves de i18n
+correspondentes em Pt/Es/En) — Dave apontou que não faz sentido aqui: o login é gerenciado
+inteiramente pelo mantosfc.com, o addin só é a porta de entrada. Recuperação de senha é
+problema do mantosfc, não deste addin.
+
+`dotnet test` caiu de 285 para 282 (esperado, não regressão — 3 testes de cobertura de i18n
+por locale desapareceram junto com a chave removida).
+
+---
+
 ## 2026-09-04 — Ícone da marca conectado de verdade (não é mais placeholder)
 
 O Dave gerou (via IA de imagem) e aprovou a arte da marca: camisa/gola em Swiss Style com uma

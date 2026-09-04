@@ -14,7 +14,6 @@ namespace MantosExtract.Core.I18n
             ["me.login.password.hide"] = "Ocultar",
             ["me.login.submit"] = "Entrar",
             ["me.login.submitting"] = "Entrando...",
-            ["me.login.forgot"] = "Olvidé mi contraseña",
             ["me.login.error.generic"] = "No fue posible entrar. Intente de nuevo.",
             ["me.login.error.emailRequired"] = "Ingrese su correo electrónico.",
             ["me.login.error.passwordRequired"] = "Ingrese su contraseña.",
