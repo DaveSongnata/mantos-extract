@@ -213,8 +213,8 @@
      carregar (rede offline / arquivo ausente) — sem <video>, o fundo sólido normal aparece. */
   #screen-login{position:relative;overflow:hidden;flex:1;display:flex;flex-direction:column;justify-content:center;}
   .login-bg-video{
-    position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-    filter:blur(20px) saturate(120%);transform:scale(1.15);z-index:0;
+    position:absolute;inset:0;width:100%;height:100%;object-fit:fill;
+    filter:blur(20px) saturate(120%);z-index:0;
   }
   .login-bg-overlay{position:absolute;inset:0;background:rgba(18,18,18,.45);z-index:1;}
   .login-glass{
@@ -224,7 +224,11 @@
     backdrop-filter:blur(16px) saturate(150%);
     border:var(--lw) solid rgba(255,255,255,.5);
     padding:26px 18px 22px;
+    color:#fff;
   }
+  /* Textos herdam branco do .login-glass (contraste contra o vídeo escuro) — exceto o banner
+     de erro, que mantém seu próprio fundo claro sólido e precisa continuar com texto escuro. */
+  .login-glass .banner .msg{color:var(--ink);}
 
   /* ---- empty state / detectar (4.2) -------------------------------------------------- */
   .empty-state{
