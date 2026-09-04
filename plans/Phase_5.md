@@ -1,11 +1,11 @@
 # Fase 5 — Estados de erro, créditos esgotados, retomada, i18n completo, instalador
 
-- **STATUS:** [x] Implementada, incluindo o instalador single-EXE (2026-09-04 —
-  `installer/MantosExtract.Installer.csproj` deixou de ser placeholder: WinForms + WebView2
-  wizard real, ILRepack, `scripts/build-all.ps1` gera
-  `MantosExtract_Setup.exe` versionado de verdade). Falta só o ícone de marca (ver "O QUE
-  FALTA" — candidato gerado, aguardando aprovação do Davidson). Resto testado via
-  build/unit test; **nada validado numa VM real**.
+- **STATUS:** [x] Implementada por completo (2026-09-04) — instalador single-EXE real
+  (`installer/MantosExtract.Installer.csproj`: WinForms + WebView2 wizard, ILRepack,
+  `scripts/build-all.ps1` gera `MantosExtract_Setup.exe` versionado) **e** ícone de marca
+  aprovado e conectado (`src/MantosExtract.Resources/icons/`, `Win32Resource` de verdade no
+  `MantosExtract.Resources.csproj`). Resto testado via build/unit test; **nada validado numa
+  VM real com CorelDRAW** — isso segue como o único gap genuíno.
 - **OBJETIVO (1 frase):** Poli o produto pros edge cases reais do público (confecção,
   internet instável, PC sem GPU) e entrega um caminho de deploy real.
 - **OBJETIVO-DE-NEGÓCIO SERVIDO:** É a diferença entre "funciona na demo" e "funciona no
@@ -47,12 +47,14 @@
 1. **Número/fluxo real de WhatsApp da tela 4.8** — o spec já pedia explicitamente pra não
    inventar. Hoje a tela mostra só texto ("Peça ao responsável... renovar no painel do
    mantosfc"), sem botão de deep-link. Trocar por um botão real quando o número existir.
-2. **Ícone da marca Mantos Extract** — `MantosExtract.Resources` ainda é um DLL vazio (sem
-   `Win32Resource`), o botão do Corel e o instalador renderizam com ícone padrão até existir
-   um `.ico` de verdade. Um candidato (Swiss Style, camisa + faixa diagonal cortando + marcas
-   de registro) foi gerado e está aguardando aprovação do Dave/Davidson — falta vetorizar/
-   simplificar pra 16px e rodar `gen_icons.ps1`/`build_res.ps1` (mesma receita do Optimus).
-   **Isso é cosmético — não bloqueia instalação nem uso do addin.**
+2. ~~Ícone da marca Mantos Extract~~ — **FEITO em 2026-09-04.** Arte aprovada pelo Dave
+   (Swiss Style: camisa + faixa diagonal de corte + marcas de registro de canto).
+   `src/MantosExtract.Resources/icons/gen_icons.ps1` recorta a arte-fonte em dois enquadres —
+   só o glifo central (16/24/32/48px, os cantos/cruzes viram ruído nesse tamanho) e a arte
+   completa com molduras (256px) — e monta o `.ico`; `build_res.ps1` empacota o `.res` Win32
+   (RT_GROUP_ICON 101 + RT_STRING "Mantos Extract"), `MantosExtract.Resources.csproj` agora
+   tem `<Win32Resource>mantosextract.res</Win32Resource>` de verdade. Mesmo `.ico` vira
+   `ApplicationIcon` do instalador e ícone da janela do wizard.
 3. ~~Instalador single-EXE polido~~ — **FEITO em 2026-09-04.**
    `installer/MantosExtract.Installer.csproj` é um WinForms + WebView2 wizard real (3 passos:
    Bem-vindo/Instalando/Concluído), `installer/Core/InstallerEngine.cs` +

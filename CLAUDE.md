@@ -145,8 +145,9 @@ o `EngineRunner.cs`, não a Ponte de Ação.
   antigas nunca são apagadas. `shared/bin/` é gitignored (arquivo binário, não é fonte — fica
   em armazenamento normal). Versão lida de `src/MantosExtract.AddIn/Build.cs` (`Build.Tag`) e
   stampada no assembly do instalador (aparece em "Aplicativos e Recursos" do Windows).
-  Instalador registra desinstalação de verdade (`installer/Core/Uninstaller.cs`). Único gap
-  cosmético: sem ícone de marca ainda (`plans/Phase_5.md` item 2) — não bloqueia a instalação.
+  Instalador registra desinstalação de verdade (`installer/Core/Uninstaller.cs`). Ícone de
+  marca real e aprovado (`src/MantosExtract.Resources/icons/`, `gen_icons.ps1` +
+  `build_res.ps1`), usado no botão do Corel, no EXE do instalador e na janela do wizard.
   `scripts/deploy-dev.ps1` continua existindo à parte, pra iteração rápida numa VM sem gerar
   instalador (copia o payload solto direto pro Addons).
 - Layout da solução (ver `plans/index.md` §Reúso vs. construção): `src/MantosExtract.Core`

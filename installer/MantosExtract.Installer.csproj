@@ -6,9 +6,10 @@
     external service. Same shape as ../optimus/installer/Optimus.Installer.csproj, minus the
     separate maintenance-app module (Mantos Extract has none) and the Whisper voice payload.
 
-    NO custom icon yet: Davidson não aprovou uma arte (plans/Phase_5.md item 2) — o instalador
-    e o addon rodam com o ícone padrão do WinForms/Corel até lá. Funcionalmente completo sem
-    isso; é só cosmético.
+    Ícone: mantosextract.ico (camisa + corte diagonal, Swiss Style, aprovado pelo Dave em
+    2026-09-04) — gerado por ../src/MantosExtract.Resources/icons/gen_icons.ps1 a partir da
+    arte fonte. Mesmo arquivo usado como ApplicationIcon do EXE e como ícone da janela
+    (embutido como "app.icon.ico", carregado por InstallerForm.LoadAppIcon).
 
     NO ILRepack in dev (Debug): every managed dep ships loose next to the EXE for fast
     iteration. On Release, ILRepackMerge below produces a SINGLE packed EXE.
@@ -24,6 +25,7 @@
     <RootNamespace>MantosExtract.Installer</RootNamespace>
     <AssemblyName>MantosExtract_Setup</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../src/MantosExtract.Resources/icons/mantosextract.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,6 +45,10 @@
   <ItemGroup>
     <EmbeddedResource Include="wwwroot/index.html">
       <LogicalName>ui.index.html</LogicalName>
+    </EmbeddedResource>
+    <!-- Mark embedded so the borderless Form can set it as the window/taskbar icon. -->
+    <EmbeddedResource Include="../src/MantosExtract.Resources/icons/mantosextract.ico">
+      <LogicalName>app.icon.ico</LogicalName>
     </EmbeddedResource>
     <!-- Native WebView2 loader (extracted at startup via SetDllDirectory). -->
     <EmbeddedResource Include="../dist/payload/WebView2Loader.dll">

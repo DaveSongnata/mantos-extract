@@ -42,10 +42,10 @@ public class InstallerForm : Form
         HandleCreated += (_, _) => ApplyRoundedCorners();
     }
 
-    // No brand icon exists yet (Davidson ainda não aprovou uma arte — plans/Phase_5.md item 2).
+    // "app.icon.ico" é embutido pelo .csproj a partir de
+    // ../src/MantosExtract.Resources/icons/mantosextract.ico (arte aprovada, 2026-09-04).
     // GetManifestResourceStream devolve null pra um recurso ausente (não lança), então isto
-    // degrada de forma limpa pro ícone padrão do WinForms até o dia em que "app.icon.ico" for
-    // embutido de verdade.
+    // segue degradando de forma limpa pro ícone padrão do WinForms se o recurso um dia sumir.
     private static Icon? LoadAppIcon()
     {
         try

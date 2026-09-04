@@ -1,14 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    MantosExtract addon ICON/STRING resources — the toolbar button mark.
+    MantosExtract addon ICON/STRING resources — the toolbar button mark (camisa + corte
+    diagonal, Swiss Style, arte aprovada pelo Dave em 2026-09-04).
 
-    PLACEHOLDER (Fase 1, see plans/Phase_1.md "DO NOT WANT"): no Davidson-approved mark exists
-    yet, so this ships as a code-only DLL with no Win32 resource. addon/config.xml already
-    references icon id 101 in this DLL (mirroring optimus/src/Optimus.Resources), so the
-    toolbar button renders blank until a real .res is added here (same recipe as Optimus:
-    icons/gen_icons.ps1 draws the mark, build_res.ps1 packs the .res, then
-    <Win32Resource>mantosextract.res</Win32Resource> is set on this project).
+    RESOURCE-ONLY DLL: no code. It carries a Win32 RT_GROUP_ICON + RT_ICON (16/24/32/48 px)
+    and an RT_STRING ("Mantos Extract"), embedded from mantosextract.res. CorelDRAW's addon
+    framework loads it by the name declared in addon/config.xml
+    (path="MantosExtract.Resources.dll"), mapping our command GUID to icon id 101 so the
+    button shows the mark instead of a blank slot.
+
+    mantosextract.res is a hand-built Win32 .res (icons/gen_icons.ps1 crops the approved mark
+    → build_res.ps1 packs the .res — same recipe as
+    ../../../optimus/src/Optimus.Resources/build_res.ps1). Regenerate both if the mark changes,
+    then rebuild.
 
     net48 so it deploys next to MantosExtract.AddIn.dll under
     <Corel>\Programs64\Addons\MantosExtract\.
@@ -17,6 +22,7 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>MantosExtract.Resources</AssemblyName>
     <RootNamespace>MantosExtract.Resources</RootNamespace>
+    <Win32Resource>mantosextract.res</Win32Resource>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Deterministic>true</Deterministic>
   </PropertyGroup>

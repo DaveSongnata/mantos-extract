@@ -6,6 +6,39 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-04 — Ícone da marca conectado de verdade (não é mais placeholder)
+
+O Dave gerou (via IA de imagem) e aprovou a arte da marca: camisa/gola em Swiss Style com uma
+faixa diagonal branca "cortando" o desenho (metáfora de extração) + marcas de registro de
+canto (`+` e cantos em L), paleta restrita a vermelho/preto/branco/cinza — bate 1:1 com o
+design system já travado. Como é uma imagem raster gerada por IA (2048×2048, sem versão
+vetorial), simplificar pra um ícone de 16px teria que ser fiel à arte aprovada, não uma
+reinterpretação minha — resolvido por segmentação: um script mede os componentes conectados
+do JPG fonte (fundo vs. blobs de cor) pra achar automaticamente a caixa do GLIFO CENTRAL
+(camisa + corte) separada das quatro marcas de canto e das cruzes, que são blobs isolados e
+pequenos. Dois enquadres da MESMA arte, não dois designs: 16/24/32/48px usam só o glifo
+central (as marcas de canto viram ruído ilegível nesse tamanho); 256px usa a arte completa com
+as molduras, que ainda se lê bem nesse tamanho e reforça a moldura Swiss Style. Validado antes
+de commitar: gerei uma folha de pré-visualização com nearest-neighbor scale-up de cada
+resolução pra conferir a legibilidade real, não só confiar no redimensionamento.
+
+`src/MantosExtract.Resources/icons/gen_icons.ps1` (recorta+redimensiona, gera os PNGs +
+`mantosextract.ico`) e `build_res.ps1` (empacota o `.res` Win32 com RT_GROUP_ICON 101 +
+RT_STRING "Mantos Extract") — mesma receita byte-a-byte de
+`../optimus/src/Optimus.Resources/{gen_icons,build_res}.ps1`, só trocando a fonte de "desenhar
+programaticamente" pra "recortar de um arquivo aprovado". `MantosExtract.Resources.csproj`
+ganhou `<Win32Resource>mantosextract.res</Win32Resource>` de verdade (antes: DLL vazio, sem
+recurso nenhum). O mesmo `.ico` virou `ApplicationIcon` do instalador e ícone da janela do
+wizard (`installer/MantosExtract.Installer.csproj`, `InstallerForm.LoadAppIcon`). Rebuild
+completo + `build-all.ps1` + extração do ícone do EXE final confirmam visualmente que a marca
+aparece de verdade no `MantosExtract_Setup.exe` publicado.
+
+Fecha o último gap real do `plans/Phase_5.md` (item 2) — a Fase 5 e o pacote de build/
+instalador estão completos agora, o único "não testado" que sobra é validação numa VM com
+CorelDRAW de verdade (não é código faltando, é ambiente).
+
+---
+
 ## 2026-09-04 — Instalador single-EXE real (não é mais placeholder)
 
 Depois de publicar o kit ZIP versionado (entrada anterior deste changelog), o Dave apontou —
