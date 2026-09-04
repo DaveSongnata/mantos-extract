@@ -81,6 +81,21 @@ namespace MantosExtract.Core.Auth
             }
         }
 
+        public async Task ChangePasswordAsync(string sessionId, string currentPassword, string newPassword, CancellationToken ct)
+        {
+            string body = "{\"currentPassword\":" + JsonQuote(currentPassword) +
+                          ",\"newPassword\":" + JsonQuote(newPassword) + "}";
+            using var content = new StringContent(body, Encoding.UTF8, "application/json");
+            using HttpResponseMessage response = await SendAsync(HttpMethod.Post, "/api/v1/creator/me/change-password", content, sessionId, ct)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string respBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                throw BuildError(response.StatusCode, respBody);
+            }
+        }
+
         private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, HttpContent? content, string? bearerSessionId, CancellationToken ct)
         {
             using var request = new HttpRequestMessage(method, new Uri(_baseUri, path));

@@ -73,6 +73,20 @@ namespace MantosExtract.Core.Auth
             }
         }
 
+        /// <summary>Troca voluntária de senha (Configurações) — disponível a qualquer momento,
+        /// nunca forçada (decisão do Dave, 2026-09-04). Não é uma decisão de tela como as
+        /// outras (não muda Login/Home), por isso não devolve AuthOrchestratorResult: só
+        /// propaga sucesso ou lança a MantosfcAuthException de <see cref="IMantosfcAuthClient"/>
+        /// pro chamador decidir o que mostrar.</summary>
+        public async Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct)
+        {
+            SessionState? session = _store.LoadSession();
+            if (session == null)
+                throw new MantosfcAuthException("E_UNAUTHORIZED", "Sessão inválida. Faça login novamente.");
+
+            await _client.ChangePasswordAsync(session.SessionId, currentPassword, newPassword, ct).ConfigureAwait(false);
+        }
+
         public async Task<AuthOrchestratorResult> LogoutAsync(CancellationToken ct)
         {
             SessionState? session = _store.LoadSession();

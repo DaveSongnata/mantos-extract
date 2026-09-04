@@ -6,6 +6,32 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-04 — Trocar senha em Configurações (voluntário, não forçado)
+
+Dave pediu inicialmente um fluxo de troca OBRIGATÓRIA no primeiro login (conta criada pelo
+admin com senha padrão → força trocar antes de usar) — cheguei a implementar um flag
+`mustChangePassword` no mantosfc (migration + model + login/me response), mas ele voltou atrás
+no meio da implementação: "vamo voltar essa parte ai, nao vamos colocar esse 'precisa trocar
+a senha', so vamos disponibilizar". Revertido tudo do lado mantosfc antes de commitar
+(`git restore` + apagar a migration nova — nada disso chegou a ir pro repo).
+
+O que ficou: só disponibilizar a troca voluntária, a qualquer momento, em Configurações.
+Achado importante: **o endpoint já existia pronto no mantosfc**
+(`POST /api/v1/creator/me/change-password`, `me_controller.ts`) — zero mudança de backend
+necessária. Todo o trabalho ficou neste repo: `IMantosfcAuthClient.ChangePasswordAsync` +
+implementação real em `MantosfcAuthClient` (mesmo padrão de `SendAsync`/`BuildError` do
+login), `AuthOrchestrator.ChangePasswordAsync` (carrega a sessão local, delega pro client —
+não é uma decisão de tela, então não devolve `AuthOrchestratorResult`), novo comando
+`changePassword` no `MantosExtractBridge` com seu PRÓPRIO tipo de resposta (nunca `"auth"` —
+trocar senha não navega pra lugar nenhum, o operador continua em Configurações), e a seção
+nova na tela de Configurações (`index.html`): senha atual + nova + confirmar, validação
+client-side (tamanho mínimo 8, confirmação bate) antes de chamar o servidor.
+
+`dotnet test` 317/317 verde (285 → 317: +2 `AuthOrchestrator`, +3 `MantosfcAuthClient`, resto
+é cobertura de i18n automática pras ~11 chaves novas × 3 idiomas).
+
+---
+
 ## 2026-09-04 — Vídeo de fundo + glassmorphism de bordas duras na tela de login
 
 Dave mandou o clipe (`docs/loop.mp4`, 1,5 MB) e pediu explicitamente um efeito de vidro

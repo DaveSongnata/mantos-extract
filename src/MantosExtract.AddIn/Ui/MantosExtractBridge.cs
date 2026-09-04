@@ -91,6 +91,7 @@ namespace MantosExtract.AddIn.Ui
 
                 string cmd;
                 string email = "", password = "", tag = "", openAiKey = "";
+                string currentPassword = "", newPassword = "";
                 string[] confirmedIds = Array.Empty<string>();
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
@@ -100,6 +101,8 @@ namespace MantosExtract.AddIn.Ui
                     password = Str(root, "password");
                     tag = Str(root, "tag");
                     openAiKey = Str(root, "key");
+                    currentPassword = Str(root, "currentPassword");
+                    newPassword = Str(root, "newPassword");
                     confirmedIds = StrArray(root, "ids");
                 }
 
@@ -125,6 +128,7 @@ namespace MantosExtract.AddIn.Ui
                     case "logout": RunAsync(async ct => PostAuth(await _auth.LogoutAsync(ct))); break;
 
                     case "saveOpenAiKey": SaveOpenAiKey(openAiKey); break;
+                    case "changePassword": RunAsync(ct => ChangePasswordAsync(currentPassword, newPassword, ct)); break;
 
                     case "detect": RunAsync(ct => RunDetectAsync(ct)); break;
                     case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, ct)); break;
@@ -203,6 +207,24 @@ namespace MantosExtract.AddIn.Ui
             {
                 MantosExtractLog.Write("SaveOpenAiKey FAILED: " + ex.Message);
                 Post(new { type = "openaiKey", ok = false, error = L("me.common.error.unknown") });
+            }
+        }
+
+        /// <summary>Troca voluntária de senha, disponível em Configurações a qualquer momento
+        /// (Dave, 2026-09-04: "so vamos disponibilizar" — nunca forçada no primeiro login).
+        /// Resultado tem seu PRÓPRIO type ("changePassword"), nunca "auth" — trocar a senha não
+        /// é uma decisão de tela, o operador continua exatamente onde estava.</summary>
+        private async Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct)
+        {
+            try
+            {
+                await _auth.ChangePasswordAsync(currentPassword, newPassword, ct).ConfigureAwait(false);
+                Post(new { type = "changePassword", ok = true });
+            }
+            catch (MantosfcAuthException ex)
+            {
+                MantosExtractLog.Write("ChangePassword falhou: " + ex);
+                Post(new { type = "changePassword", ok = false, error = ex.Message });
             }
         }
 

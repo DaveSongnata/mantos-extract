@@ -545,6 +545,28 @@
 
       <div class="divider"></div>
 
+      <label for="currentPassword" data-i18n="me.settings.password.label">Senha</label>
+      <p class="help-text" data-i18n="me.settings.password.help">Troque a senha da sua conta quando quiser.</p>
+      <div class="field">
+        <input id="currentPassword" type="password" autocomplete="current-password" data-i18n-placeholder="me.settings.password.current.placeholder" placeholder="Senha atual">
+      </div>
+      <div class="field">
+        <input id="newPassword" type="password" autocomplete="new-password" data-i18n-placeholder="me.settings.password.new.placeholder" placeholder="Nova senha">
+      </div>
+      <div class="field">
+        <input id="newPasswordConfirm" type="password" autocomplete="new-password" data-i18n-placeholder="me.settings.password.confirm.placeholder" placeholder="Confirmar nova senha">
+      </div>
+      <div id="changePasswordError" class="banner banner-error" hidden>
+        <span class="tag" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </span>
+        <span class="msg"><span id="changePasswordErrorText"></span></span>
+      </div>
+      <button type="button" id="changePasswordBtn" class="secondary" data-i18n="me.settings.password.submit">Trocar senha</button>
+      <div id="passwordChanged" class="saved-note" hidden data-i18n="me.settings.password.saved">Senha alterada.</div>
+
+      <div class="divider"></div>
+
       <div id="logoutConfirm" hidden>
         <p class="help-text" data-i18n="me.settings.logout.confirm">Sair da sua conta neste computador?</p>
         <div style="display:flex;gap:8px;">
@@ -674,6 +696,19 @@
         break;
       case "openaiKey":
         if (msg.ok) { show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500); }
+        break;
+      case "changePassword":
+        $("changePasswordBtn").disabled = false;
+        $("changePasswordBtn").textContent = T("me.settings.password.submit");
+        if (msg.ok) {
+          $("currentPassword").value = "";
+          $("newPassword").value = "";
+          $("newPasswordConfirm").value = "";
+          show("passwordChanged");
+          setTimeout(function(){ hide("passwordChanged"); }, 2500);
+        } else {
+          showChangePasswordError(msg.error || T("me.common.error.unknown"));
+        }
         break;
       case "status":
         onStatus(msg);
@@ -936,6 +971,11 @@
   // ---- settings navigation -----------------------------------------------
   $("settingsBtn").addEventListener("click", function(){
     $("openaiKey").value = "";
+    $("currentPassword").value = "";
+    $("newPassword").value = "";
+    $("newPasswordConfirm").value = "";
+    hide("changePasswordError");
+    hide("passwordChanged");
     hide("logoutConfirm");
     show("logoutBtn");
     showScreen("screen-settings");
@@ -949,6 +989,23 @@
 
   $("saveOpenAiKey").addEventListener("click", function(){
     send({cmd:"saveOpenAiKey", key: $("openaiKey").value.trim()});
+  });
+
+  function showChangePasswordError(text){
+    $("changePasswordErrorText").textContent = text;
+    show("changePasswordError");
+  }
+  $("changePasswordBtn").addEventListener("click", function(){
+    hide("changePasswordError");
+    hide("passwordChanged");
+    var current = $("currentPassword").value;
+    var next = $("newPassword").value;
+    var confirm = $("newPasswordConfirm").value;
+    if (next.length < 8) { showChangePasswordError(T("me.settings.password.error.tooShort")); return; }
+    if (next !== confirm) { showChangePasswordError(T("me.settings.password.error.mismatch")); return; }
+    $("changePasswordBtn").disabled = true;
+    $("changePasswordBtn").textContent = T("me.settings.password.submitting");
+    send({cmd:"changePassword", currentPassword: current, newPassword: next});
   });
 
   $("logoutBtn").addEventListener("click", function(){ hide("logoutBtn"); show("logoutConfirm"); });

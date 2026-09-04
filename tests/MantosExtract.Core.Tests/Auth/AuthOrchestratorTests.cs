@@ -141,5 +141,41 @@ namespace MantosExtract.Core.Tests.Auth
 
             Assert.Equal(0, client.LogoutCallCount);
         }
+
+        [Fact]
+        public async Task ChangePassword_WithLocalSession_SendsSessionIdAndBothPasswords()
+        {
+            var client = new FakeAuthClient();
+            var store = new FakeCredentialStore();
+            store.SaveSession(new SessionState("s1", Now.AddHours(1), "tenant", "a@b.com", 10));
+
+            string? capturedSession = null, capturedCurrent = null, capturedNew = null;
+            client.OnChangePassword = (sessionId, current, @new) =>
+            {
+                capturedSession = sessionId;
+                capturedCurrent = current;
+                capturedNew = @new;
+            };
+
+            await Build(client, store).ChangePasswordAsync("old123", "new456", CancellationToken.None);
+
+            Assert.Equal(1, client.ChangePasswordCallCount);
+            Assert.Equal("s1", capturedSession);
+            Assert.Equal("old123", capturedCurrent);
+            Assert.Equal("new456", capturedNew);
+        }
+
+        [Fact]
+        public async Task ChangePassword_NoLocalSession_ThrowsWithoutCallingServer()
+        {
+            var client = new FakeAuthClient();
+            var store = new FakeCredentialStore();
+
+            MantosfcAuthException ex = await Assert.ThrowsAsync<MantosfcAuthException>(
+                () => Build(client, store).ChangePasswordAsync("old", "new", CancellationToken.None));
+
+            Assert.Equal("E_UNAUTHORIZED", ex.Code);
+            Assert.Equal(0, client.ChangePasswordCallCount);
+        }
     }
 }

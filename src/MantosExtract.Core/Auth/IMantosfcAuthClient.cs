@@ -14,5 +14,11 @@ namespace MantosExtract.Core.Auth
         Task<LoginResponse> LoginAsync(string email, string password, CancellationToken ct);
         Task<MeResponse> GetMeAsync(string sessionId, CancellationToken ct);
         Task LogoutAsync(string sessionId, CancellationToken ct);
+
+        /// <summary>Troca voluntária de senha (Configurações), disponível a qualquer momento —
+        /// NUNCA forçada no primeiro login (decisão do Dave, 2026-09-04: "so vamos
+        /// disponibilizar"). Backend já existe pronto, sem mudança nenhuma no mantosfc:
+        /// POST /api/v1/creator/me/change-password (verificado em me_controller.ts).</summary>
+        Task ChangePasswordAsync(string sessionId, string currentPassword, string newPassword, CancellationToken ct);
     }
 }

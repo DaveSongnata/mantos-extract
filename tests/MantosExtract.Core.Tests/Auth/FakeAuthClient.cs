@@ -13,9 +13,11 @@ namespace MantosExtract.Core.Tests.Auth
         public Func<string, string, LoginResponse>? OnLogin;
         public Func<string, MeResponse>? OnGetMe;
         public Action<string>? OnLogout;
+        public Action<string, string, string>? OnChangePassword;
 
         public string? LastMeSessionId { get; private set; }
         public int LogoutCallCount { get; private set; }
+        public int ChangePasswordCallCount { get; private set; }
 
         public Task<LoginResponse> LoginAsync(string email, string password, CancellationToken ct)
         {
@@ -34,6 +36,13 @@ namespace MantosExtract.Core.Tests.Auth
         {
             LogoutCallCount++;
             OnLogout?.Invoke(sessionId);
+            return Task.CompletedTask;
+        }
+
+        public Task ChangePasswordAsync(string sessionId, string currentPassword, string newPassword, CancellationToken ct)
+        {
+            ChangePasswordCallCount++;
+            OnChangePassword?.Invoke(sessionId, currentPassword, newPassword);
             return Task.CompletedTask;
         }
     }

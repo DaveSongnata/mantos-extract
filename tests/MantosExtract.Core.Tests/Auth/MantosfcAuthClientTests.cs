@@ -101,5 +101,48 @@ namespace MantosExtract.Core.Tests.Auth
 
             Assert.Equal("E_UNAUTHORIZED", ex.Code);
         }
+
+        [Fact]
+        public async Task ChangePasswordAsync_Success_HitsMeChangePasswordWithBearerAndBody()
+        {
+            var handler = StubHttpMessageHandler.Json(HttpStatusCode.OK, @"{""message"":""Senha alterada com sucesso.""}");
+            var client = new MantosfcAuthClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.ChangePasswordAsync("session-uuid-123", "senhaAntiga1", "senhaNova123", CancellationToken.None);
+
+            Assert.Contains("/api/v1/creator/me/change-password", handler.LastRequest!.RequestUri!.PathAndQuery);
+            AuthenticationHeaderValue? auth = handler.LastRequest.Headers.Authorization;
+            Assert.NotNull(auth);
+            Assert.Equal("session-uuid-123", auth!.Parameter);
+            Assert.Contains("senhaAntiga1", handler.LastRequestBody);
+            Assert.Contains("senhaNova123", handler.LastRequestBody);
+        }
+
+        [Fact]
+        public async Task ChangePasswordAsync_WrongCurrentPassword_RelaysServerMessageAndCode()
+        {
+            var handler = StubHttpMessageHandler.Json(HttpStatusCode.UnprocessableEntity,
+                @"{""message"":""Senha atual incorreta."",""code"":""E_WRONG_PASSWORD""}");
+            var client = new MantosfcAuthClient(handler, new Uri("https://mantosfc.test"));
+
+            MantosfcAuthException ex = await Assert.ThrowsAsync<MantosfcAuthException>(
+                () => client.ChangePasswordAsync("s1", "errada", "novaSenha123", CancellationToken.None));
+
+            Assert.Equal("Senha atual incorreta.", ex.Message);
+            Assert.Equal("E_WRONG_PASSWORD", ex.Code);
+        }
+
+        [Fact]
+        public async Task ChangePasswordAsync_NetworkFailure_ThrowsFriendlyMessageWithInnerException()
+        {
+            var handler = StubHttpMessageHandler.Throwing(new HttpRequestException("connection refused"));
+            var client = new MantosfcAuthClient(handler, new Uri("https://mantosfc.test"));
+
+            MantosfcAuthException ex = await Assert.ThrowsAsync<MantosfcAuthException>(
+                () => client.ChangePasswordAsync("s1", "old", "newPassword1", CancellationToken.None));
+
+            Assert.Equal("E_NETWORK", ex.Code);
+            Assert.NotNull(ex.InnerException);
+        }
     }
 }
