@@ -4,8 +4,12 @@ obj/
 *.user
 .vs/
 
-# Build/deploy staging (regenerado por scripts/deploy-dev.ps1) — não é fonte
+# Build/deploy staging (regenerado por scripts/deploy-dev.ps1 e scripts/build-all.ps1) — não é fonte
 /dist/
+
+# Kits versionados entregues a clientes (gerados por scripts/build-all.ps1) — arquivo binário
+# grande, fica em armazenamento normal, não no histórico do git (mesmo padrão do Optimus).
+shared/bin/
 
 # Chaves privadas / segredos — nunca versionar
 *.pfx

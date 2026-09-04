@@ -6,6 +6,26 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-04 — Processo de build versionado (`scripts/build-all.ps1`), mesmo padrão do Optimus/SisCut
+
+Dave pediu pra padronizar o processo de entrega igual já existe no Optimus e no SisCut: build
+completo → payload → pasta de cliente VERSIONADA, gerada automaticamente, sem apagar versões
+anteriores (`shared/bin/redistributables/Clientes/<versão>/`). Criado `scripts/build-all.ps1`
+espelhando `../optimus/scripts/build-all.ps1` (mesma estrutura de steps, mesmo caminho de
+publicação, mesma leitura de versão via `Build.Tag`). `shared/bin/` entrou no `.gitignore`
+(binário grande, não é fonte — mesma regra do Optimus).
+
+Diferença deliberada em relação ao Optimus: **não gera instalador single-EXE**, porque
+`installer/MantosExtract.Installer.csproj` ainda é um placeholder (falta ícone aprovado pelo
+Davidson + wizard WinForms/ILRepack — `plans/Phase_5.md` item 3, decisão pré-existente, não
+travada agora). Fabricar um "Setup.exe" que só imprime uma linha seria enganoso — o script
+zipa o payload real (`MantosExtract_Kit.zip`) e publica isso na pasta versionada; é o mesmo
+conteúdo que `scripts/deploy-dev.ps1` já copia manualmente pra uma VM, só que agora com
+histórico de versões. Rodado de ponta a ponta nesta sessão: gerou `0.1.0/MantosExtract_Kit.zip`
+(0,7 MB, 22 arquivos) sem erro.
+
+---
+
 ## 2026-09-04 — Correção: fallback de chave OpenAI REMOVIDO (era o pior cenário, não o mais seguro)
 
 Ao explicar o fallback `OPENAI_API_KEY` no `.env`, o Dave apontou o problema real: em
