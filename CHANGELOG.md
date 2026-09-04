@@ -6,6 +6,32 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-04 — Vídeo de fundo + glassmorphism de bordas duras na tela de login
+
+Dave mandou o clipe (`docs/loop.mp4`, 1,5 MB) e pediu explicitamente um efeito de vidro
+fosco/desfoque gaussiano no fundo da tela de login — uma exceção DELIBERADA à regra "nunca
+glassmorphism" do design system (documentada agora no `CLAUDE.md`, seção UI Rules, pra não
+virar "correção" acidental de alguém lendo a regra geral sem ver a exceção).
+
+Decisão técnica: não dava pra embutir o vídeo como `data:` URI igual o `login-mark.png` — 1,5
+MB vira ~2 MB de base64 dentro do `index.html`, que já ficou pesado só com o PNG de 33 KB (o
+próprio agente não consegue mais ler o arquivo inteiro de uma vez por causa disso). Em vez
+disso, `loop.mp4` virou um SEGUNDO `EmbeddedResource` (`ui.loop.mp4`) no
+`MantosExtract.AddIn.csproj`, extraído por `MantosExtractBridge.ExtractUi()` pra dentro da
+MESMA pasta temp que já serve o `index.html` — um `<video src="loop.mp4">` relativo no HTML
+resolve sozinho contra o virtual host `https://mantosextract.app/` que já existe, sem precisar
+de nenhuma mudança na Docker/bridge além de extrair um arquivo a mais. Extração é tolerante:
+resource ausente não derruba nada, a tela de login só perde o vídeo e sobra o fundo sólido.
+
+Efeito: `<video autoplay muted loop playsinline>` com `filter: blur(20px)` posicionado atrás
+de um cartão (`.login-glass`) com `backdrop-filter: blur(16px)` + fundo branco 10% opaco +
+borda branca translúcida — mantendo raio ZERO e sem gradiente (só opacidade+blur), pra ficar
+"vidro fosco Suíço" em vez do glassmorphism genérico arredondado que todo mundo usa. Balanço
+de `<div>` da seção conferido programaticamente (8 aberturas / 8 fechamentos) antes de buildar,
+já que o arquivo ficou grande demais pra revisão visual direta de um `Read` completo.
+
+---
+
 ## 2026-09-04 — Logo na tela de login + remoção de "Esqueci minha senha"
 
 Dave notou que a marca aparecia no instalador e no ícone do addin no Corel, mas não na tela de

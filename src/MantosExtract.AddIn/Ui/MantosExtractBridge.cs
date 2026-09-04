@@ -502,6 +502,17 @@ namespace MantosExtract.AddIn.Ui
                 ?? throw new InvalidOperationException("Recurso de UI ausente: ui.index.html"))
             using (FileStream fs = File.Create(Path.Combine(dir, "index.html")))
                 s.CopyTo(fs);
+
+            // Vídeo de fundo da tela de login (loop.mp4) — mesma pasta/virtual host do
+            // index.html, então um <video src="loop.mp4"> relativo no HTML já resolve sozinho.
+            // Ausente não é fatal: a tela de login cai pro fundo sólido (sem <video>, sem erro).
+            using (Stream? s = asm.GetManifestResourceStream("ui.loop.mp4"))
+            {
+                if (s != null)
+                    using (FileStream fs = File.Create(Path.Combine(dir, "loop.mp4")))
+                        s.CopyTo(fs);
+            }
+
             return dir;
         }
 

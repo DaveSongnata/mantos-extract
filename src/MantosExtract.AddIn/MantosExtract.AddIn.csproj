@@ -60,6 +60,13 @@
     <EmbeddedResource Include="wwwroot/index.html">
       <LogicalName>ui.index.html</LogicalName>
     </EmbeddedResource>
+    <!-- Login screen background loop (Swiss Style hard-edged glassmorphism, Dave 2026-09-04).
+         Extracted alongside index.html by MantosExtractBridge.ExtractUi() into the SAME temp
+         folder, so a plain relative <video src="loop.mp4"> in the HTML resolves against the
+         "mantosextract.app" virtual host with zero network dependency. -->
+    <EmbeddedResource Include="wwwroot/loop.mp4">
+      <LogicalName>ui.loop.mp4</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

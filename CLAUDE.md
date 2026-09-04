@@ -127,6 +127,12 @@ o `EngineRunner.cs`, não a Ponte de Ação.
     os únicos elementos decorativos permitidos, usados com moderação (um por tela no
     máximo) — nunca gradiente, nunca sombra, nunca glassmorphism, nunca sparkle/estrela
     (clichê visual de "isso usa IA").
+    **Exceção deliberada, só na tela de login (Dave, 2026-09-04):** vídeo de fundo (`loop.mp4`)
+    borrado + um cartão translúcido (`backdrop-filter: blur`) por cima — glassmorphism de
+    propósito, mas mantendo a identidade: raio ZERO, borda dura (branca translúcida em vez de
+    preta, pra continuar legível sobre o vídeo), sem gradiente (o "vidro" é opacidade+blur, não
+    degradê). Não generalizar esse padrão pras outras telas sem decisão nova — é uma exceção
+    de UMA tela, não uma revisão da regra.
 - Config e user-data do WebView2 sempre em `%LOCALAPPDATA%`, nunca em Program Files (init do
   WebView2 falha silencioso lá — lição paga no SisCut).
 - Log: `%TEMP%\MantosExtract\docker.log`. Nada pode derrubar o host do Corel — todo entry
