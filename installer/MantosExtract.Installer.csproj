@@ -1,24 +1,128 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    MantosExtract installer — PLACEHOLDER (Fase 5, see plans/Phase_5.md). Real content mirrors
-    optimus/installer/Optimus.Installer.csproj: WinForms host for a WebView2 wizard UI, copies
-    the addon payload into every CorelDRAW's Programs64\Addons\MantosExtract\, ILRepack on
-    Release for a single EXE. None of that exists yet — Fase 1's VM deploy is a manual copy
-    (see plans/Phase_1.md VALIDATION). This project exists now only so the .sln's project set
-    matches the target solution shape from day one (spec §0.1: copy Optimus's structure).
+    Mantos Extract installer — WinForms host for a WebView2 wizard UI. Copies the addon
+    payload into every CorelDRAW's Programs64\Addons\MantosExtract\. No license, no HWID, no
+    external service. Same shape as ../optimus/installer/Optimus.Installer.csproj, minus the
+    separate maintenance-app module (Mantos Extract has none) and the Whisper voice payload.
+
+    NO custom icon yet: Davidson não aprovou uma arte (plans/Phase_5.md item 2) — o instalador
+    e o addon rodam com o ícone padrão do WinForms/Corel até lá. Funcionalmente completo sem
+    isso; é só cosmético.
+
+    NO ILRepack in dev (Debug): every managed dep ships loose next to the EXE for fast
+    iteration. On Release, ILRepackMerge below produces a SINGLE packed EXE.
+
+    Build order: scripts/build-all.ps1 builds MantosExtract.AddIn + MantosExtract.Resources,
+    assembles ../dist/payload/, THEN builds this project (it embeds ../dist/payload/*).
   -->
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>MantosExtract.Installer</RootNamespace>
     <AssemblyName>MantosExtract_Setup</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <!-- ILRepack: merge all managed deps into a single EXE on Release (dev-only, not deployed). -->
+    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.34.0" PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <!-- Installer UI (single self-contained HTML file; extracted to %TEMP% at startup). -->
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot/index.html">
+      <LogicalName>ui.index.html</LogicalName>
+    </EmbeddedResource>
+    <!-- Native WebView2 loader (extracted at startup via SetDllDirectory). -->
+    <EmbeddedResource Include="../dist/payload/WebView2Loader.dll">
+      <LogicalName>WebView2Loader.dll</LogicalName>
+    </EmbeddedResource>
+    <!-- Excluded from ILRepack (IAsyncDisposable type-forwarded by net48); loaded via
+         Program.OnAssemblyResolve from this embedded copy. -->
+    <EmbeddedResource Include="../dist/payload/Microsoft.Bcl.AsyncInterfaces.dll">
+      <LogicalName>Microsoft.Bcl.AsyncInterfaces.dll</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- ── Addon payload → <Corel>\Programs64\Addons\MantosExtract\ ────────────── -->
+  <ItemGroup>
+    <_AddonPayload Include="../dist/payload/*.dll" />
+    <_AddonPayload Include="../dist/payload/*.xslt" />
+    <_AddonPayload Include="../dist/payload/*.xml" />
+    <_AddonPayload Include="../dist/payload/*.addon" />
+    <EmbeddedResource Include="@(_AddonPayload)">
+      <LogicalName>addon.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <!-- Binário de upscale (Fase 4) — redistribuível de terceiros, só entra se
+         scripts/build-all.ps1 já o encontrou em assets/upscale/ e montou payload/upscale/. Se
+         ausente, este ItemGroup simplesmente fica vazio (o instalador ainda funciona; o
+         UpscaleRunner degrada pra BinaryMissing em runtime, ver plans/Phase_4.md). -->
+    <_UpscalePayload Include="../dist/payload/upscale/*" />
+    <EmbeddedResource Include="@(_UpscalePayload)">
+      <LogicalName>addon.upscale/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- Licence attribution travels WITH the binaries, not only in the repo. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../THIRD-PARTY-NOTICES.txt">
+      <LogicalName>notices.THIRD-PARTY-NOTICES.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!--
+    ILRepack: on Release, merge all managed deps into packed/MantosExtract_Setup.exe so the
+    whole distribution is a SINGLE file. WebView2Loader.dll is a native PE (can't be repacked)
+    — it travels embedded and is extracted at startup. Microsoft.Bcl.AsyncInterfaces is left
+    out (net48 type-forwards IAsyncDisposable) and loaded from its embedded copy via
+    AssemblyResolve. Same recipe as ../optimus/installer/Optimus.Installer.csproj.
+
+    NOTE: with System.Text.Json merged and Bcl.AsyncInterfaces external,
+    JsonSerializer.Serialize would throw TypeLoadException — but this installer only ever
+    PARSES JSON (JsonDocument.Parse) and hand-rolls its outgoing messages, so this is safe.
+  -->
+  <Target Name="ILRepackMerge" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <_PackedDir>$(OutputPath)packed\</_PackedDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(_PackedDir)" />
+    <!-- The x64 WebView2Loader.dll (native PE) lands in the output root here; ILRepack chokes
+         on it. It is already embedded from dist/payload + extracted at runtime, so drop it
+         from the merge search path. -->
+    <Delete Files="$(OutputPath)WebView2Loader.dll" />
+    <ItemGroup>
+      <_RepackInput Include="$(OutputPath)MantosExtract_Setup.exe" />
+      <_RepackInput Include="$(OutputPath)Microsoft.Web.WebView2.Core.dll" />
+      <_RepackInput Include="$(OutputPath)Microsoft.Web.WebView2.WinForms.dll" />
+      <_RepackInput Include="$(OutputPath)System.Text.Json.dll" />
+      <_RepackInput Include="$(OutputPath)System.Buffers.dll" />
+      <_RepackInput Include="$(OutputPath)System.Memory.dll" />
+      <_RepackInput Include="$(OutputPath)System.Numerics.Vectors.dll" />
+      <_RepackInput Include="$(OutputPath)System.Runtime.CompilerServices.Unsafe.dll" />
+      <_RepackInput Include="$(OutputPath)System.Text.Encodings.Web.dll" />
+      <_RepackInput Include="$(OutputPath)System.Threading.Tasks.Extensions.dll" />
+      <_RepackInput Include="$(OutputPath)System.ValueTuple.dll" />
+    </ItemGroup>
+    <ILRepack
+      Internalize="false"
+      InputAssemblies="@(_RepackInput)"
+      OutputFile="$(_PackedDir)MantosExtract_Setup.exe"
+      TargetKind="WinExe"
+      LibraryPath="$(OutputPath)"
+      XmlDocumentation="false"
+      DebugInfo="false" />
+    <Message Text="ILRepack: packed\MantosExtract_Setup.exe ready — single-EXE (WebView2Loader + Bcl.AsyncInterfaces embedded)" Importance="high" />
+  </Target>
 
 </Project>

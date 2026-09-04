@@ -6,6 +6,37 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-04 — Instalador single-EXE real (não é mais placeholder)
+
+Depois de publicar o kit ZIP versionado (entrada anterior deste changelog), o Dave apontou —
+com razão — que "kit manual pra extrair na mão" não é um instalador completo, e que o gap do
+ícone da marca não deveria ter travado o resto (instalar de verdade, com wizard e
+desinstalação registrada no Windows, não depende de nenhuma arte aprovada). Construído
+`installer/Core/InstallerEngine.cs` + `installer/Core/Uninstaller.cs` +
+`installer/InstallerForm.cs` + `installer/Program.cs`, portados quase 1:1 de
+`../optimus/installer/` (mesma receita: acha toda instalação do CorelDRAW em
+`Program Files\Corel\...`, fecha o Corel antes de escrever, apaga-e-recopia a pasta do addon,
+verifica espaço em disco antes de copiar um byte, limpa Mark-of-the-Web de cada DLL, registra
+em "Aplicativos e Recursos" com uma cópia de si mesmo como desinstalador). Diferenças
+deliberadas em relação ao Optimus: sem o módulo de app de manutenção (Mantos Extract não tem
+equivalente), sem o payload de voz/Whisper, e a UI do wizard (`installer/wwwroot/index.html`)
+usa os tokens Swiss Style do próprio addin em vez do visual laranja arredondado do Optimus —
+o instalador é a primeira tela que o cliente vê, não podia destoar do resto do produto. 3
+passos (Bem-vindo/Instalando/Concluído) em vez dos 4 do Optimus, porque não existe o passo de
+opt-in do app de manutenção aqui.
+
+`scripts/build-all.ps1` atualizado pra compilar o instalador (com `-p:Version=` estampando
+`Build.Tag`) e publicar o EXE do ILRepack (`installer/bin/Release/net48/packed/
+MantosExtract_Setup.exe`) na pasta versionada, no lugar do ZIP manual. Único gap real que
+sobrou é cosmético: sem `.ico` de marca ainda (ver `plans/Phase_5.md` item 2) — o botão do
+Corel e a janela do instalador rodam com ícone padrão até existir uma arte aprovada; isso não
+impede a instalação nem o funcionamento do addin. Rodado de ponta a ponta nesta sessão: build
+completo + `dotnet test` (285/285 verdes) + `build-all.ps1` gerando
+`shared/bin/redistributables/Clientes/0.1.0/MantosExtract_Setup.exe` (3,8 MB, EXE único, 22
+arquivos de payload embutidos).
+
+---
+
 ## 2026-09-04 — Processo de build versionado (`scripts/build-all.ps1`), mesmo padrão do Optimus/SisCut
 
 Dave pediu pra padronizar o processo de entrega igual já existe no Optimus e no SisCut: build
@@ -15,14 +46,8 @@ espelhando `../optimus/scripts/build-all.ps1` (mesma estrutura de steps, mesmo c
 publicação, mesma leitura de versão via `Build.Tag`). `shared/bin/` entrou no `.gitignore`
 (binário grande, não é fonte — mesma regra do Optimus).
 
-Diferença deliberada em relação ao Optimus: **não gera instalador single-EXE**, porque
-`installer/MantosExtract.Installer.csproj` ainda é um placeholder (falta ícone aprovado pelo
-Davidson + wizard WinForms/ILRepack — `plans/Phase_5.md` item 3, decisão pré-existente, não
-travada agora). Fabricar um "Setup.exe" que só imprime uma linha seria enganoso — o script
-zipa o payload real (`MantosExtract_Kit.zip`) e publica isso na pasta versionada; é o mesmo
-conteúdo que `scripts/deploy-dev.ps1` já copia manualmente pra uma VM, só que agora com
-histórico de versões. Rodado de ponta a ponta nesta sessão: gerou `0.1.0/MantosExtract_Kit.zip`
-(0,7 MB, 22 arquivos) sem erro.
+Primeira versão deste script não gerava instalador single-EXE (zipava o payload cru) — ver a
+entrada acima, corrigida na mesma sessão depois do Dave apontar que isso não era aceitável.
 
 ---
 

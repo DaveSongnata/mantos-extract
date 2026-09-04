@@ -18,6 +18,7 @@ const vm = require('vm');
 
 const PAGES = [
   'src/MantosExtract.AddIn/wwwroot/index.html',
+  'installer/wwwroot/index.html',
 ];
 
 // Provided by the host before the page script runs (I18nScript.Build) or by the browser.

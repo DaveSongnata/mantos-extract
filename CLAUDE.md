@@ -138,15 +138,17 @@ o `EngineRunner.cs`, não a Ponte de Ação.
 ## Build
 
 - `dotnet build MantosExtract.sln -c Release` + `dotnet test MantosExtract.sln`.
-- **`scripts/build-all.ps1`** → `dist/payload` (+ `dist/MantosExtract_Kit`) →
-  `shared/bin/redistributables/Clientes/<versão>/MantosExtract_Kit.zip` — mesmo padrão de
-  entrega versionada do Optimus/SisCut (`../optimus/scripts/build-all.ps1`), versões antigas
-  nunca são apagadas. `shared/bin/` é gitignored (arquivo binário, não é fonte — fica em
-  armazenamento normal). Versão lida de `src/MantosExtract.AddIn/Build.cs` (`Build.Tag`).
-  **Ainda não gera instalador single-EXE** — `installer/MantosExtract.Installer.csproj`
-  continua placeholder (falta ícone do Davidson + wizard WinForms/ILRepack, ver
-  `plans/Phase_5.md` item 3); até lá o kit ZIP é o entregável, extraído manualmente em
-  `Programs64\Addons\MantosExtract\` (`scripts/deploy-dev.ps1` automatiza isso numa VM só).
+- **`scripts/build-all.ps1`** → `dist/payload` → `installer/MantosExtract.Installer.csproj`
+  (WinForms + WebView2 wizard, ILRepack funde tudo num EXE único) →
+  `shared/bin/redistributables/Clientes/<versão>/MantosExtract_Setup.exe` (+ `.zip`) — mesmo
+  padrão de entrega versionada do Optimus/SisCut (`../optimus/scripts/build-all.ps1`), versões
+  antigas nunca são apagadas. `shared/bin/` é gitignored (arquivo binário, não é fonte — fica
+  em armazenamento normal). Versão lida de `src/MantosExtract.AddIn/Build.cs` (`Build.Tag`) e
+  stampada no assembly do instalador (aparece em "Aplicativos e Recursos" do Windows).
+  Instalador registra desinstalação de verdade (`installer/Core/Uninstaller.cs`). Único gap
+  cosmético: sem ícone de marca ainda (`plans/Phase_5.md` item 2) — não bloqueia a instalação.
+  `scripts/deploy-dev.ps1` continua existindo à parte, pra iteração rápida numa VM sem gerar
+  instalador (copia o payload solto direto pro Addons).
 - Layout da solução (ver `plans/index.md` §Reúso vs. construção): `src/MantosExtract.Core`
   (netstandard2.0), `src/MantosExtract.Interop` (net48, COM), `src/MantosExtract.Windows`
   (net48, DPAPI/prefs), `src/MantosExtract.AddIn` (net48, WebView2 + bridge + docker +
