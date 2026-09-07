@@ -714,8 +714,7 @@
     screenBeforeHistory: null,  // same pattern, for historyBack (screen-history)
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
     extractRealPct: 0,       // last CONFIRMED batch progress (from real extractProgress events)
-    extractCreepPct: 0,      // what extractBarInner actually shows — creeps toward, never past, the next slot
-    extractTotalCount: 1,
+    extractCreepPct: 0,      // what extractBarInner actually shows — creeps toward CREEP_CEILING
     extractProgressTimer: null,
   };
 
@@ -973,7 +972,6 @@
     });
     state.extractRealPct = 0;
     state.extractCreepPct = 0;
-    state.extractTotalCount = ids.length || 1;
     $("extractBarInner").style.width = "0%";
     startProgressCreep();
     showScreen("screen-extracting");
@@ -983,21 +981,31 @@
   // Bug fix (Dave, 2026-09-07): "a barra tem que se mexer" — extractBarInner used to only
   // jump in discrete steps when a real extractProgress event arrived, so it sat dead-still for
   // however many seconds a single OpenAI call takes (same root cause as the per-row kicker
-  // fix above, different symptom: the OVERALL bar, not a single row). Same trick already used
-  // in installer/wwwroot/index.html's install screen (and SisCut's own progress screens): the
-  // bar creeps continuously on a timer toward a soft ceiling — up to ~70% of the way into the
-  // NEXT element's slot, never past it — so it always looks alive without ever claiming an
-  // element is more done than it really is. Real events (onExtractProgress) can only push
-  // extractRealPct/extractCreepPct FORWARD, never let the creep overtake genuine progress.
+  // fix above, different symptom: the OVERALL bar, not a single row).
+  //
+  // Correction (Dave, 2026-09-08): the fix above still froze in practice — the ceiling was
+  // `extractRealPct + slot*0.7`, LOCKED per element until a real extractProgress event bumped
+  // extractRealPct forward. At 0.6%/tick that ~70%-of-a-slot allowance is used up in ~2s, so on
+  // any element whose OpenAI call ran longer than that (routine — a single call is usually
+  // 10-60s), the bar sat dead-still again waiting for the real event ("só se movimenta quando
+  // uma das imagens é finalizada", exactly reproduced). Replaced the per-slot cap with a single
+  // soft ceiling (CREEP_CEILING, well under 100) approached asymptotically: the step shrinks as
+  // it nears the ceiling but never reaches exactly zero, so motion never truly stops before
+  // completion — and, critically, it no longer depends on how many elements have actually
+  // finished (per Dave: "se movimente independente do resultado"). Real events can still pull
+  // the target (and the floor) forward if genuine progress overtakes the creep; only the real
+  // onExtractDone event is ever allowed to reach 100%.
   var REDUCED_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var CREEP_CEILING = 96;
+  var CREEP_RATE = 0.01; // ~12s time-constant to close the gap to the ceiling, any element count
   function startProgressCreep(){
     stopProgressCreep();
     if (REDUCED_MOTION) return; // real jumps only — no simulated motion for this operator
     state.extractProgressTimer = setInterval(function(){
-      var slot = 100 / state.extractTotalCount;
-      var ceiling = Math.min(100, state.extractRealPct + slot * 0.7);
-      if (state.extractCreepPct < ceiling) {
-        state.extractCreepPct = Math.min(ceiling, state.extractCreepPct + 0.6);
+      var target = Math.max(CREEP_CEILING, state.extractRealPct);
+      if (state.extractCreepPct < target) {
+        var step = Math.max(0.02, (target - state.extractCreepPct) * CREEP_RATE);
+        state.extractCreepPct = Math.min(target, state.extractCreepPct + step);
         $("extractBarInner").style.width = state.extractCreepPct + "%";
       }
     }, 120);
@@ -1058,7 +1066,6 @@
     var total = msg.total || 1;
     var doneCount = 0;
     Object.keys(state.extractProgress).forEach(function(id){ if (state.extractProgress[id].ok !== null) doneCount++; });
-    state.extractTotalCount = total;
     state.extractRealPct = Math.round((doneCount/total)*100);
     if (state.extractCreepPct < state.extractRealPct || REDUCED_MOTION) state.extractCreepPct = state.extractRealPct;
     $("extractBarInner").style.width = state.extractCreepPct + "%";
