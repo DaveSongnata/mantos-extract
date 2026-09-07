@@ -35,15 +35,15 @@ namespace MantosExtract.Core.Extract
             _http.Timeout = TimeSpan.FromSeconds(90); // image-edit round trip is the slowest call in the pipeline
         }
 
-        public async Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey,
+        public async Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct)
         {
-            string url = await PostExtractionAsync(sessionId, openAiApiKey, imageBytes, mimeType, box, label, ct)
+            string url = await PostExtractionAsync(sessionId, openAiApiKey, quality, imageBytes, mimeType, box, label, ct)
                 .ConfigureAwait(false);
             return await DownloadAsync(url, ct).ConfigureAwait(false);
         }
 
-        private async Task<string> PostExtractionAsync(string sessionId, string openAiApiKey,
+        private async Task<string> PostExtractionAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct)
         {
             using var form = new MultipartFormDataContent();
@@ -62,6 +62,10 @@ namespace MantosExtract.Core.Extract
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", sessionId);
             request.Headers.Add("X-OpenAI-Api-Key", openAiApiKey);
+            // Cost/quality dial the operator sets in Configurações (Dave, 2026-09-07) — orthogonal
+            // to fidelity (mantosfc's gpt-image-2 always preserves the source at high fidelity
+            // regardless of this value; see CLAUDE.md/CHANGELOG on the hallucination fix).
+            request.Headers.Add("X-OpenAI-Quality", string.IsNullOrWhiteSpace(quality) ? "medium" : quality);
 
             HttpResponseMessage response;
             try { response = await _http.SendAsync(request, ct).ConfigureAwait(false); }

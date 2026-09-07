@@ -6,7 +6,7 @@ namespace MantosExtract.Core.Extract
 {
     public interface IExtractionClient
     {
-        Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey,
+        Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct);
     }
 }

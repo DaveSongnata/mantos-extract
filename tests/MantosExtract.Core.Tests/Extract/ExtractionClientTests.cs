@@ -36,7 +36,7 @@ namespace MantosExtract.Core.Tests.Extract
             var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
             var box = new BoundingBox(10, 20, 300, 400);
 
-            ExtractedImage result = await client.ExtractAsync("session-abc", "sk-key",
+            ExtractedImage result = await client.ExtractAsync("session-abc", "sk-key", "medium",
                 new byte[] { 1, 2, 3 }, "image/png", box, "logo", CancellationToken.None);
 
             Assert.Equal(pngBytes, result.Bytes);
@@ -61,7 +61,7 @@ namespace MantosExtract.Core.Tests.Extract
             var box = new BoundingBox(10, 20, 300, 400);
 
             await Assert.ThrowsAsync<MantosExtractApiException>(() =>
-                client.ExtractAsync("s1", "key", new byte[] { 1 }, "image/png", box, "logo", CancellationToken.None));
+                client.ExtractAsync("s1", "key", "medium", new byte[] { 1 }, "image/png", box, "logo", CancellationToken.None));
 
             Assert.False(downloadAttempted);
         }
@@ -85,7 +85,7 @@ namespace MantosExtract.Core.Tests.Extract
             var box = new BoundingBox(10, 20, 300, 400);
 
             MantosExtractApiException ex = await Assert.ThrowsAsync<MantosExtractApiException>(() =>
-                client.ExtractAsync("s1", "key", new byte[] { 1 }, "image/png", box, "logo", CancellationToken.None));
+                client.ExtractAsync("s1", "key", "medium", new byte[] { 1 }, "image/png", box, "logo", CancellationToken.None));
 
             Assert.Equal("E_DOWNLOAD_FAILED", ex.Code);
         }
@@ -112,13 +112,65 @@ namespace MantosExtract.Core.Tests.Extract
             var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
             var box = new BoundingBox(111, 222, 333, 444);
 
-            await client.ExtractAsync("s1", "key", new byte[] { 9 }, "image/png", box, "logo", CancellationToken.None);
+            await client.ExtractAsync("s1", "key", "medium", new byte[] { 9 }, "image/png", box, "logo", CancellationToken.None);
 
             Assert.Contains("111", capturedPostBody);
             Assert.Contains("222", capturedPostBody);
             Assert.Contains("333", capturedPostBody);
             Assert.Contains("444", capturedPostBody);
             Assert.Contains("logo", capturedPostBody);
+        }
+
+        [Fact]
+        public async Task ExtractAsync_SendsQualityAsHeader()
+        {
+            string? capturedQualityHeader = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    capturedQualityHeader = req.Headers.TryGetValues("X-OpenAI-Quality", out var vals)
+                        ? string.Join(",", vals) : null;
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/abc""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+            var box = new BoundingBox(1, 2, 3, 4);
+
+            await client.ExtractAsync("s1", "key", "high", new byte[] { 9 }, "image/png", box, "logo", CancellationToken.None);
+
+            Assert.Equal("high", capturedQualityHeader);
+        }
+
+        [Fact]
+        public async Task ExtractAsync_BlankQuality_DefaultsToMediumHeader()
+        {
+            string? capturedQualityHeader = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    capturedQualityHeader = req.Headers.TryGetValues("X-OpenAI-Quality", out var vals)
+                        ? string.Join(",", vals) : null;
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/abc""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+            var box = new BoundingBox(1, 2, 3, 4);
+
+            await client.ExtractAsync("s1", "key", "", new byte[] { 9 }, "image/png", box, "logo", CancellationToken.None);
+
+            Assert.Equal("medium", capturedQualityHeader);
         }
     }
 }

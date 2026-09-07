@@ -149,6 +149,32 @@
   }
   .toggle-visibility:hover{background:var(--red);}
 
+  /* ---- seletor de qualidade da extração (Dave, 2026-09-07) — slider discreto de 3 posições
+     em vez de uma lista de modelos (gpt-image-2 é o único modelo viável, ver CHANGELOG; o que
+     o operador escolhe é o parâmetro `quality`). Swiss: trilho com borda dura, thumb quadrado,
+     sem gradiente/sombra — mesmo vocabulário do resto do sistema, não um <input range> nativo. */
+  .quality-slider{margin:4px 0 2px;}
+  .quality-slider input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;margin:0;cursor:pointer;
+  }
+  .quality-slider input[type=range]::-webkit-slider-runnable-track{
+    height:8px;background:var(--surface);border:var(--lw) solid var(--ink);
+  }
+  .quality-slider input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:20px;height:20px;margin-top:-7px;
+    background:var(--red);border:var(--lw) solid var(--ink);border-radius:0;cursor:pointer;
+  }
+  .quality-slider input[type=range]::-moz-range-track{
+    height:8px;background:var(--surface);border:var(--lw) solid var(--ink);
+  }
+  .quality-slider input[type=range]::-moz-range-thumb{
+    width:18px;height:18px;background:var(--red);border:var(--lw) solid var(--ink);border-radius:0;cursor:pointer;
+  }
+  .quality-slider input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--ink);outline-offset:2px;}
+  .quality-ticks{display:flex;justify-content:space-between;margin-top:3px;}
+  .quality-ticks span{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--gray);}
+  .quality-ticks span.active{color:var(--red);}
+
   /* ---- botões (retângulo sólido, sem raio, sem sombra) ------------------------------ */
   button{border-radius:0;}
   button.primary{
@@ -553,6 +579,20 @@
 
       <div class="divider"></div>
 
+      <label data-i18n="me.settings.quality.label">Qualidade da extração</label>
+      <p class="help-text" data-i18n="me.settings.quality.help">Mais qualidade = resultado mais nítido, custo maior por elemento. Padrão já cobre a maioria dos casos.</p>
+      <div class="quality-slider">
+        <input type="range" id="qualitySlider" min="0" max="2" step="1" value="1" data-i18n-title="me.settings.quality.label">
+        <div class="quality-ticks" id="qualityTicks">
+          <span data-i18n="me.settings.quality.low">Rápida</span>
+          <span data-i18n="me.settings.quality.medium">Padrão</span>
+          <span data-i18n="me.settings.quality.high">Alta</span>
+        </div>
+      </div>
+      <div id="qualitySaved" class="saved-note" hidden data-i18n="me.settings.quality.saved">Preferência salva.</div>
+
+      <div class="divider"></div>
+
       <label for="currentPassword" data-i18n="me.settings.password.label">Senha</label>
       <p class="help-text" data-i18n="me.settings.password.help">Troque a senha da sua conta quando quiser.</p>
       <div class="field">
@@ -667,6 +707,7 @@
     lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
     screenBeforeSettings: null, // restored by settingsBack — see bug fix note there
     screenBeforeHistory: null,  // same pattern, for historyBack (screen-history)
+    extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
   };
 
   // ---- credits badge ------------------------------------------------------
@@ -690,7 +731,10 @@
     setLoginBusy(false);
   }
 
+  var QUALITY_LEVELS = ["low", "medium", "high"];
+
   function renderHome(msg){
+    state.extractionQuality = QUALITY_LEVELS.indexOf(msg.extractionQuality) >= 0 ? msg.extractionQuality : "medium";
     $("homeEmail").textContent = msg.email || "";
     renderCredits(msg.credits || 0);
     if (msg.warning) { $("homeWarningText").textContent = msg.warning; show("homeWarning"); }
@@ -731,6 +775,12 @@
         break;
       case "openaiKey":
         if (msg.ok) { show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500); }
+        break;
+      case "extractionQuality":
+        if (msg.ok) {
+          state.extractionQuality = msg.quality;
+          show("qualitySaved"); setTimeout(function(){ hide("qualitySaved"); }, 2500);
+        }
         break;
       case "changePassword":
         $("changePasswordBtn").disabled = false;
@@ -1039,6 +1089,8 @@
     // care which screen is visible), so nothing was actually lost, but visually it looked like
     // the batch had been abandoned. Remember whatever screen was actually showing.
     state.screenBeforeSettings = SCREENS.filter(function(s){ return !$(s).hidden; })[0] || "screen-home";
+    $("qualitySlider").value = QUALITY_LEVELS.indexOf(state.extractionQuality);
+    updateQualityTicks();
     $("openaiKey").value = "";
     $("currentPassword").value = "";
     $("newPassword").value = "";
@@ -1049,6 +1101,18 @@
     show("logoutBtn");
     showScreen("screen-settings");
   });
+  function updateQualityTicks(){
+    var idx = Number($("qualitySlider").value);
+    Array.prototype.forEach.call($("qualityTicks").querySelectorAll("span"), function(el, i){
+      el.classList.toggle("active", i === idx);
+    });
+  }
+  $("qualitySlider").addEventListener("input", updateQualityTicks);
+  $("qualitySlider").addEventListener("change", function(){
+    var quality = QUALITY_LEVELS[Number(this.value)] || "medium";
+    send({cmd:"saveExtractionQuality", quality: quality});
+  });
+
   $("settingsBack").addEventListener("click", function(){
     showScreen(state.screenBeforeSettings || "screen-home");
     send({cmd:"status"});

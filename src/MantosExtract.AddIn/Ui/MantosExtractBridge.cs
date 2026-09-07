@@ -95,6 +95,7 @@ namespace MantosExtract.AddIn.Ui
                 string currentPassword = "", newPassword = "";
                 string[] confirmedIds = Array.Empty<string>();
                 string folderPath = "";
+                string extractionQuality = "";
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -107,6 +108,7 @@ namespace MantosExtract.AddIn.Ui
                     newPassword = Str(root, "newPassword");
                     confirmedIds = StrArray(root, "ids");
                     folderPath = Str(root, "path");
+                    extractionQuality = Str(root, "quality");
                 }
 
                 bool isStatusQuery = cmd == "status";
@@ -134,6 +136,7 @@ namespace MantosExtract.AddIn.Ui
                     case "logout": RunAsync(async ct => PostAuth(await _auth.LogoutAsync(ct))); break;
 
                     case "saveOpenAiKey": SaveOpenAiKey(openAiKey); break;
+                    case "saveExtractionQuality": SaveExtractionQuality(extractionQuality); break;
                     case "changePassword": RunAsync(ct => ChangePasswordAsync(currentPassword, newPassword, ct)); break;
 
                     case "detect": RunAsync(ct => RunDetectAsync(ct)); break;
@@ -192,7 +195,25 @@ namespace MantosExtract.AddIn.Ui
                 credits = session.CreditsRemaining,
                 warning = result.WarningMessage,
                 hasOpenAiKey = _credentials.LoadOpenAiKey() != null,
+                extractionQuality = ExtractionQualityStore.Read(),
             });
+        }
+
+        /// <summary>Slider in Configurações (Dave, 2026-09-07) — a plain preference (not a
+        /// secret, unlike the OpenAI key above), so ExtractionQualityStore + %LOCALAPPDATA%
+        /// plain text, never DPAPI. Silently ignores anything outside low/medium/high rather
+        /// than persisting a value the server would 422 on (E_INVALID_OPENAI_QUALITY).</summary>
+        private void SaveExtractionQuality(string quality)
+        {
+            try
+            {
+                ExtractionQualityStore.Write(quality);
+                Post(new { type = "extractionQuality", ok = true, quality = ExtractionQualityStore.Read() });
+            }
+            catch (Exception ex)
+            {
+                MantosExtractLog.Write("SaveExtractionQuality FAILED: " + ex.Message);
+            }
         }
 
         private void SaveOpenAiKey(string key)
@@ -341,6 +362,7 @@ namespace MantosExtract.AddIn.Ui
             }
 
             List<DetectedElement> confirmed = ResolveConfirmedElements(confirmedIds);
+            string extractionQuality = ExtractionQualityStore.Read();
             var placedThisBatch = new List<PlacedSlot>();
             var usedNames = new Dictionary<string, int>();
             var pageBounds = _corel.ActivePageBoundsMm();
@@ -389,7 +411,8 @@ namespace MantosExtract.AddIn.Ui
                 try
                 {
                     ExtractedImage extracted = await _extractionClient
-                        .ExtractAsync(session.SessionId, openAiKey!, _lastExportedImageBytes, _lastExportedMimeType,
+                        .ExtractAsync(session.SessionId, openAiKey!, extractionQuality,
+                                       _lastExportedImageBytes, _lastExportedMimeType,
                                        element.Box, element.Label, ct)
                         .ConfigureAwait(false);
 

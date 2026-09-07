@@ -6,6 +6,44 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-07 — Alucinação na extração corrigida (mantosfc) + slider de qualidade no addin
+
+Dave testou de verdade com fotos reais e a extração estava **inventando arte que não existe na
+foto** (um logo "Paper Rex" estilo glow/graffiti, um badge "PRX Purple Rex" com robô — nenhum dos
+dois presentes no original). Ele suspeitou que a imagem base não estivesse sendo enviada pro
+ChatGPT; não era isso (confirmado lendo o código) — a causa raiz é do lado mantosfc
+(`openai_vision_service.ts`): a chamada a `/v1/images/edits` não setava `input_fidelity`, deixando
+o modelo livre pra reinterpretar em vez de isolar o que realmente está no crop.
+
+**Achado maior pesquisando a doc oficial da OpenAI (set/2026):** não era só `gpt-image-1` sendo
+aposentado (23/10/2026) — `gpt-image-1.5` e `gpt-image-1-mini` são AMBOS aposentados em
+01/12/2026 também, a linha inteira está sendo consolidada num modelo só, `gpt-image-2`. Esse
+modelo processa toda imagem de entrada em alta fidelidade automaticamente (a API nem expõe
+parâmetro pra mudar isso), então virou o único modelo da allowlist — resolve o bug
+estruturalmente, não via um parâmetro que alguém podia esquecer de setar.
+
+**Desenho final:** o eixo de escolha do operador não é mais "modelo" (não sobra alternativa
+viável pra oferecer), é **qualidade** (`low`/`medium`/`high`, header `X-OpenAI-Quality`,
+default `medium`) — ortogonal à fidelidade, que o gpt-image-2 já garante sempre. No addin: um
+slider discreto de 3 posições em Configurações (Dave pediu explicitamente uma barra arrastável em
+vez de uma lista), estilo Swiss (trilho com borda dura, thumb quadrado, sem gradiente/sombra),
+persistido em `%LOCALAPPDATA%\MantosExtract\extraction-quality.txt` (`ExtractionQualityStore`,
+mesmo padrão do `LanguageStore` — preferência simples, nunca DPAPI) e enviado em toda chamada de
+`/mantos-extract/extract`.
+
+**Efeito colateral encontrado e corrigido (mantosfc, fora do escopo original mas achado no
+caminho):** `backend/.env.test` estava rastreado pelo git desde o scaffold inicial do projeto
+(só config inócua). Uma chave OpenAI real foi colada nele localmente pra habilitar um smoke test
+— nunca chegou a ser commitada/enviada, mas o arquivo continuar rastreado era um risco real de
+vazamento futuro. `git rm --cached` (mantém o arquivo local intacto, só para de rastrear),
+valores documentados em `.env.test.example`.
+
+`dotnet build`: 0/0. `dotnet test`: 361/361 verdes (341 → 361: +2 `ExtractionClientTests`
+provando o header `X-OpenAI-Quality`, +18 cobertura i18n automática das 6 chaves novas
+`me.settings.quality.*` × 3 idiomas). `node scripts/check-ui-js.js`: ok.
+
+---
+
 ## 2026-09-07 — Histórico de extrações: pastas organizadas por lote, sem banco de dados
 
 Dave reportou que a pasta de extração fica desorganizada (PNGs soltos, nome de guid) e pediu (a)
