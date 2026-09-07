@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
@@ -93,6 +94,7 @@ namespace MantosExtract.AddIn.Ui
                 string email = "", password = "", tag = "", openAiKey = "";
                 string currentPassword = "", newPassword = "";
                 string[] confirmedIds = Array.Empty<string>();
+                string folderPath = "";
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -104,6 +106,7 @@ namespace MantosExtract.AddIn.Ui
                     currentPassword = Str(root, "currentPassword");
                     newPassword = Str(root, "newPassword");
                     confirmedIds = StrArray(root, "ids");
+                    folderPath = Str(root, "path");
                 }
 
                 bool isStatusQuery = cmd == "status";
@@ -122,6 +125,9 @@ namespace MantosExtract.AddIn.Ui
                     case "status": PostStatus(); break;
                     case "jsError": MantosExtractLog.Write("JS ERROR: " + json); break;
                     case "idioma": SetLanguage(tag); break;
+
+                    case "history": PostHistory(); break;
+                    case "openFolder": OpenFolder(folderPath); break;
 
                     case "bootstrap": RunAsync(async ct => PostAuth(await _auth.BootstrapAsync(ct))); break;
                     case "login": RunAsync(async ct => PostAuth(await _auth.LoginAsync(email, password, ct))); break;
@@ -339,6 +345,18 @@ namespace MantosExtract.AddIn.Ui
             var usedNames = new Dictionary<string, int>();
             var pageBounds = _corel.ActivePageBoundsMm();
 
+            // One folder per batch, organized (Dave, 2026-09-07) — used to be loose guid-named
+            // files straight in WorkDir(), which is exactly the "tá tudo solto" complaint. Named
+            // upfront (element count is known before the loop starts; the exact success ratio
+            // isn't) so there is no rename dance if the process is interrupted mid-batch — the
+            // manifest written at the end carries the definitive outcome.
+            Guid batchId = Guid.NewGuid();
+            DateTime batchStart = DateTime.Now;
+            string batchDir = Path.Combine(ExtractionsRootDir(),
+                ExtractionBatchNaming.FolderName(batchId, batchStart, confirmed.Count));
+            Directory.CreateDirectory(batchDir);
+            var manifestElements = new List<ExtractionBatchManifestElement>();
+
             int succeeded = 0, failed = 0, skippedNoCredits = 0;
             bool stopBatch = false;
 
@@ -350,12 +368,23 @@ namespace MantosExtract.AddIn.Ui
                     // started as "queued" and would otherwise stay stuck there forever once
                     // the batch's final "extract" message arrives).
                     skippedNoCredits++;
+                    manifestElements.Add(new ExtractionBatchManifestElement
+                    { Id = confirmed[i].Id, Label = confirmed[i].Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = confirmed[i].Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = "E_NO_CREDITS" });
                     continue;
                 }
 
                 DetectedElement element = confirmed[i];
                 Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "extracting" });
+
+                // Computed BEFORE the network call now (used to run after upscale, only for the
+                // Corel shape name) — it doubles as the on-disk filename below, so the file and
+                // the shape end up with the SAME recognizable name instead of a bare guid.
+                string safeBase = NameSanitizer.Sanitize(element.Label);
+                string safeName = usedNames.TryGetValue(safeBase, out int count)
+                    ? NameSanitizer.WithSuffix(safeBase, count + 1)
+                    : safeBase;
+                usedNames[safeBase] = count + 1;
 
                 try
                 {
@@ -364,17 +393,26 @@ namespace MantosExtract.AddIn.Ui
                                        element.Box, element.Label, ct)
                         .ConfigureAwait(false);
 
-                    string extractedPath = Path.Combine(WorkDir(), "extraido_" + Guid.NewGuid().ToString("N") + ".png");
-                    File.WriteAllBytes(extractedPath, extracted.Bytes);
+                    string rawPath = Path.Combine(batchDir, safeName + ".tmp.png");
+                    File.WriteAllBytes(rawPath, extracted.Bytes);
 
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "upscaling" });
-                    string finalPath = ApplyUpscale(extractedPath, element.Id);
+                    string upscaledPath = ApplyUpscale(rawPath, element.Id);
 
-                    string safeBase = NameSanitizer.Sanitize(element.Label);
-                    string safeName = usedNames.TryGetValue(safeBase, out int count)
-                        ? NameSanitizer.WithSuffix(safeBase, count + 1)
-                        : safeBase;
-                    usedNames[safeBase] = count + 1;
+                    // UpscaleRunner/UpscalePaths stay generic (own fixed temp dir, no notion of
+                    // "batch") — land whatever they produced inside batchDir under the final
+                    // name, so the folder ends up with exactly one PNG per element.
+                    string finalPath = Path.Combine(batchDir, safeName + ".png");
+                    if (string.Equals(upscaledPath, rawPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Move(rawPath, finalPath);
+                    }
+                    else
+                    {
+                        File.Copy(upscaledPath, finalPath, overwrite: true);
+                        TryDelete(rawPath);
+                        TryDelete(upscaledPath);
+                    }
 
                     var (leftMm, bottomMm, widthMm, heightMm) = _corel.ImportPng(finalPath);
                     var (slotLeft, slotBottom) = ElementLayout.NextSlot(
@@ -384,6 +422,8 @@ namespace MantosExtract.AddIn.Ui
                     placedThisBatch.Add(new PlacedSlot(widthMm, heightMm));
 
                     succeeded++;
+                    manifestElements.Add(new ExtractionBatchManifestElement
+                    { Id = element.Id, Label = element.Label, FileName = Path.GetFileName(finalPath), Ok = true });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = true });
                 }
                 catch (MantosExtractApiException ex)
@@ -400,11 +440,15 @@ namespace MantosExtract.AddIn.Ui
                         // fora, não cobra os que não rodaram".
                         stopBatch = true;
                         skippedNoCredits++;
+                        manifestElements.Add(new ExtractionBatchManifestElement
+                        { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                         Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
                         continue;
                     }
 
                     failed++;
+                    manifestElements.Add(new ExtractionBatchManifestElement
+                    { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
                 }
                 catch (Exception ex)
@@ -414,12 +458,33 @@ namespace MantosExtract.AddIn.Ui
                     // a silently lost credit (spec §6 principle applied to the import side too).
                     MantosExtractLog.Write("Import FAILED for " + element.Id + ": " + ex);
                     failed++;
+                    manifestElements.Add(new ExtractionBatchManifestElement
+                    { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = "E_IMPORT_FAILED", error = L("me.common.error.unknown") });
                 }
             }
 
+            var manifest = new ExtractionBatchManifest
+            {
+                BatchId = batchId,
+                CreatedAtUtc = batchStart.ToUniversalTime(),
+                Total = confirmed.Count,
+                Succeeded = succeeded,
+                Failed = failed,
+                SkippedNoCredits = skippedNoCredits,
+                Elements = manifestElements,
+            };
+            try { File.WriteAllText(Path.Combine(batchDir, "batch.json"), manifest.ToJson()); }
+            catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
+
             Post(new { type = "extract", done = true, succeeded, failed, skippedNoCredits });
             await RefreshCreditsAsync(session, ct).ConfigureAwait(false);
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); }
+            catch { /* best-effort cleanup, never worth failing a completed extraction over */ }
         }
 
         /// <summary>Runs the upscale step and degrades gracefully (M5 / plans/Phase_4.md): any
@@ -466,6 +531,85 @@ namespace MantosExtract.AddIn.Ui
                 // Best effort — the operator already saw the result of their action; a failed
                 // credit refresh is a stale badge, never a reason to re-show an error banner.
                 MantosExtractLog.Write("RefreshCreditsAsync FAILED: " + ex.Message);
+            }
+        }
+
+        // ---- history (Dave, 2026-09-07 — "nem precisaríamos de banco de dados se as pastas
+        // fossem organizadas") ------------------------------------------------------------------
+
+        /// <summary>Filesystem-as-database: every batch folder under ExtractionsRootDir() that
+        /// has a readable batch.json IS the history — nothing is indexed anywhere else.</summary>
+        private void PostHistory()
+        {
+            var batches = new List<object>();
+            string[] dirs;
+            try { dirs = Directory.GetDirectories(ExtractionsRootDir()); }
+            catch (Exception ex)
+            {
+                MantosExtractLog.Write("PostHistory: GetDirectories FAILED: " + ex.Message);
+                dirs = Array.Empty<string>();
+            }
+
+            // The folder name itself is date-sortable (yyyyMMdd-HHmmss prefix) — newest first is
+            // just a reverse ordinal sort, no need to parse anything out of the name.
+            Array.Sort(dirs, StringComparer.OrdinalIgnoreCase);
+            Array.Reverse(dirs);
+
+            int taken = 0;
+            foreach (string dir in dirs)
+            {
+                if (taken >= 50) break; // sane cap so a long-lived install never makes this slow
+                string manifestPath = Path.Combine(dir, "batch.json");
+                if (!File.Exists(manifestPath)) continue;
+                try
+                {
+                    ExtractionBatchManifest manifest = ExtractionBatchManifest.FromJson(File.ReadAllText(manifestPath));
+                    batches.Add(new
+                    {
+                        batchId = manifest.BatchId,
+                        createdAtUtc = manifest.CreatedAtUtc,
+                        total = manifest.Total,
+                        succeeded = manifest.Succeeded,
+                        failed = manifest.Failed,
+                        folderPath = dir,
+                    });
+                    taken++;
+                }
+                catch (Exception ex)
+                {
+                    // A missing/corrupt manifest just means that one batch is invisible to the
+                    // history screen — never a reason to fail the whole list or crash the host.
+                    MantosExtractLog.Write("PostHistory: skipping unreadable manifest at " + manifestPath + ": " + ex.Message);
+                }
+            }
+
+            Post(new { type = "history", batches });
+        }
+
+        /// <summary>Opens a batch folder in Explorer. <paramref name="path"/> comes from our own
+        /// page's JS, but it is cheap to double-check it actually resolves inside
+        /// ExtractionsRootDir() before shelling out to explorer.exe — defense in depth against a
+        /// future bug in the page, not a product-facing error path.</summary>
+        private void OpenFolder(string path)
+        {
+            try
+            {
+                string root = Path.GetFullPath(ExtractionsRootDir());
+                if (!root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                    root += Path.DirectorySeparatorChar;
+                string full = Path.GetFullPath(path);
+
+                if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                {
+                    MantosExtractLog.Write("OpenFolder: rejected path outside ExtractionsRootDir: " + path);
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + full + "\"") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MantosExtractLog.Write("OpenFolder FAILED: " + ex.Message);
             }
         }
 
@@ -564,11 +708,26 @@ namespace MantosExtract.AddIn.Ui
             return dir;
         }
 
-        /// <summary>Not served to the page — intermediate files (exported selection, extracted/
-        /// upscaled PNGs before import) that only C#/COM ever touch.</summary>
+        /// <summary>Not served to the page — intermediate files (exported selection) that only
+        /// C#/COM ever touch. NOT where extracted PNGs live anymore (see ExtractionsRootDir) —
+        /// %TEMP% can be wiped by Windows at any time, wrong for anything meant to be browsable
+        /// history.</summary>
         public static string WorkDir()
         {
             string dir = Path.Combine(Path.GetTempPath(), "MantosExtract", "work");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+        /// <summary>Persistent home for extraction batches (Dave, 2026-09-07) — one subfolder
+        /// per batch (ExtractionBatchNaming.FolderName), each with its own batch.json manifest.
+        /// Mirrors UserDataDir()'s use of %LOCALAPPDATA% as this app's durable data home, rather
+        /// than the %TEMP% folder the extracted PNGs used to land in loose.</summary>
+        public static string ExtractionsRootDir()
+        {
+            string dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "MantosExtract", "Extractions");
             Directory.CreateDirectory(dir);
             return dir;
         }

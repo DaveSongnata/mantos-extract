@@ -6,6 +6,54 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-07 — Histórico de extrações: pastas organizadas por lote, sem banco de dados
+
+Dave reportou que a pasta de extração fica desorganizada (PNGs soltos, nome de guid) e pediu (a)
+uma pasta por lote de extração, tipo `extração-uuid-data-algo-interessante`, e (b) uma tela de
+histórico — com a própria intuição de que "nem precisaríamos de banco de dados se as pastas
+fossem organizadas". Implementado exatamente assim: filesystem-as-database, sem banco nenhum.
+
+**Onde os arquivos moram agora:** `%LOCALAPPDATA%\MantosExtract\Extractions\` em vez de
+`%TEMP%\MantosExtract\work\` — mesma convenção que `UserDataDir()` já usa pro perfil do WebView2
+(`%LOCALAPPDATA%\MantosExtract\WebView2`); `%TEMP%` pode ser limpo pelo Windows a qualquer
+momento, exatamente errado pra algo que devia funcionar como histórico navegável.
+
+**Nome da pasta** (`MantosExtract.Core.Extract.ExtractionBatchNaming.FolderName`, lógica pura,
+testada primeiro): `{yyyyMMdd-HHmmss}_{8 chars do batch id}_{N}el` — ordenável por data, único, e
+já mostra a contagem de elementos sem abrir nada. Decidido nomear com a contagem TOTAL (conhecida
+antes do lote começar) em vez do resultado final (só conhecido no fim) — evita uma dança de
+renomear a pasta se o processo for interrompido no meio; o resultado exato (sucesso/falha por
+elemento) fica no manifesto.
+
+**Manifesto** (`ExtractionBatchManifest`, também lógica pura + `System.Text.Json`): um
+`batch.json` por pasta, sempre escrito ao final do lote (mesmo que tenha parado no meio por
+créditos zerados — reflete o que realmente aconteceu, parcial ou completo). O comando `history`
+novo no bridge só enumera pastas + desserializa cada manifesto — pasta sem manifesto ou
+corrompida é ignorada silenciosamente (log, nunca derruba o host), igual toda outra checagem de
+robustez deste projeto.
+
+**Bônus decidido junto (mesmo problema, mesma causa):** o nome sanitizado do elemento
+(`NameSanitizer`, já existia) agora também vira o nome do ARQUIVO em disco, não só da forma no
+Corel — antes o arquivo ficava com nome de guid e só a forma no canvas tinha nome legível.
+
+**Segurança:** o comando `openFolder` (abre a pasta do lote no Explorer, a pedido da tela de
+histórico) valida que o caminho pedido resolve de fato para dentro de `ExtractionsRootDir()`
+antes de chamar `explorer.exe` — defesa barata contra um bug futuro no JS tentando abrir um
+caminho arbitrário, não um fluxo de produto.
+
+**Nota de dívida técnica, não escondida:** `MantosExtractBridge.cs` passou de 577 para 645 linhas
+com esta mudança, furando o limite de 500 linhas do CLAUDE.md (que já estava furado antes desta
+sessão). Não fiz o split agora porque não foi pedido e mexer na estrutura de classes de um
+arquivo com lógica sensível de COM/rede sem necessidade explícita é risco desnecessário — sinalizo
+aqui como candidato a refactor (mover `PostHistory`/`OpenFolder`/`ExtractionsRootDir` pra uma
+classe própria) na próxima vez que alguém mexer nesta área.
+
+`dotnet build`: 0/0. `dotnet test`: 341/341 verdes (314 → 341: +6 lógica pura nova de
+ExtractionBatchNaming/ExtractionBatchManifest, +21 cobertura i18n automática das 7 chaves novas
+`me.history.*` × 3 idiomas). `node scripts/check-ui-js.js`: ok.
+
+---
+
 ## 2026-09-07 — Três bugs reais encontrados via `docker.log` da VM (primeira validação ponta a ponta)
 
 Dave testou de verdade dentro do CorelDRAW (v0.2.2/v0.3.0) e reportou três problemas — os dois

@@ -351,6 +351,9 @@
     <div class="brand"><span class="tab" aria-hidden="true"></span><span data-i18n="me.app.title">Mantos Extract</span></div>
     <div class="topbar-right">
       <span id="creditsBadge" class="credits-badge"><span class="n"></span><span class="u" data-i18n="me.home.credits.unit">créd.</span></span>
+      <button id="historyBtn" class="icon-btn" type="button" data-i18n-title="me.history.button" title="Histórico" hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
+      </button>
       <button id="settingsBtn" class="icon-btn" type="button" data-i18n-title="me.home.settings.button" title="Configurações" hidden>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
       </button>
@@ -582,6 +585,28 @@
       <button type="button" id="logoutBtn" class="danger" data-i18n="me.settings.logout">Sair</button>
     </section>
 
+    <!-- histórico de extrações (Dave, 2026-09-07) -->
+    <section id="screen-history" hidden>
+      <div class="settings-header">
+        <button type="button" id="historyBack" class="icon-btn" data-i18n-title="me.history.back" title="Voltar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </button>
+        <span class="title" data-i18n="me.history.title">Histórico de extrações</span>
+      </div>
+
+      <div id="historyEmpty" class="muted" data-i18n="me.history.empty" hidden>Nenhuma extração ainda.</div>
+      <div style="overflow-x:auto;">
+        <table class="dtable">
+          <thead><tr>
+            <th data-i18n="me.history.table.date">Data</th>
+            <th data-i18n="me.history.table.elements">Elementos</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="historyList"></tbody>
+        </table>
+      </div>
+    </section>
+
   </div>
 </div>
 
@@ -617,7 +642,8 @@
   function hide(id){ $(id).hidden = true; }
 
   var SCREENS = ["screen-loading","screen-login","screen-home","screen-detecting","screen-select",
-                 "screen-extracting","screen-result","screen-error","screen-credits-zero","screen-settings"];
+                 "screen-extracting","screen-result","screen-error","screen-credits-zero","screen-settings",
+                 "screen-history"];
   function showScreen(id){
     SCREENS.forEach(function(s){ $(s).hidden = (s !== id); });
   }
@@ -640,6 +666,7 @@
     extractProgress: {},      // id -> {label, stage, ok}
     lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
     screenBeforeSettings: null, // restored by settingsBack — see bug fix note there
+    screenBeforeHistory: null,  // same pattern, for historyBack (screen-history)
   };
 
   // ---- credits badge ------------------------------------------------------
@@ -649,6 +676,7 @@
     badge.classList.toggle("zero", n <= 0);
     badge.setAttribute("data-show", "1");
     $("settingsBtn").hidden = false;
+    $("historyBtn").hidden = false;
   }
 
   // ---- auth screens ---------------------------------------------------------
@@ -657,6 +685,7 @@
     else hide("loginError");
     $("creditsBadge").removeAttribute("data-show");
     $("settingsBtn").hidden = true;
+    $("historyBtn").hidden = true;
     showScreen("screen-login");
     setLoginBusy(false);
   }
@@ -721,6 +750,9 @@
         break;
       case "credits":
         renderCredits(msg.credits || 0);
+        break;
+      case "history":
+        onHistory(msg);
         break;
       case "detectProgress":
         $("detectingStage").setAttribute("data-i18n", "me.detect.progress." + msg.stage);
@@ -1021,6 +1053,47 @@
     showScreen(state.screenBeforeSettings || "screen-home");
     send({cmd:"status"});
   });
+
+  // ---- history navigation (Dave, 2026-09-07) — same "remember where I came from" pattern
+  // as Settings above, so opening History mid-flow never abandons the operator's screen.
+  $("historyBtn").addEventListener("click", function(){
+    state.screenBeforeHistory = SCREENS.filter(function(s){ return !$(s).hidden; })[0] || "screen-home";
+    showScreen("screen-history");
+    send({cmd:"history"});
+  });
+  $("historyBack").addEventListener("click", function(){
+    showScreen(state.screenBeforeHistory || "screen-home");
+    send({cmd:"status"});
+  });
+
+  function onHistory(msg){
+    var listEl = $("historyList");
+    listEl.innerHTML = "";
+    var batches = msg.batches || [];
+    $("historyEmpty").hidden = batches.length > 0;
+
+    batches.forEach(function(b){
+      var row = document.createElement("tr");
+
+      var dateCell = document.createElement("td");
+      var d = new Date(b.createdAtUtc);
+      dateCell.textContent = isNaN(d.getTime()) ? b.createdAtUtc : d.toLocaleString(window.MANTOSEXTRACT_LANG_KEY || undefined);
+
+      var countCell = document.createElement("td");
+      countCell.textContent = b.succeeded + "/" + b.total;
+
+      var actionCell = document.createElement("td");
+      var openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "secondary";
+      openBtn.textContent = T("me.history.openFolder");
+      openBtn.addEventListener("click", function(){ send({cmd:"openFolder", path: b.folderPath}); });
+      actionCell.appendChild(openBtn);
+
+      row.appendChild(dateCell); row.appendChild(countCell); row.appendChild(actionCell);
+      listEl.appendChild(row);
+    });
+  }
 
   Array.prototype.forEach.call($("langRow").querySelectorAll("button"), function(btn){
     btn.classList.toggle("active", btn.getAttribute("data-lang") === window.MANTOSEXTRACT_LANG_KEY);

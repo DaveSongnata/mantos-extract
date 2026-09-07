@@ -49,6 +49,14 @@ namespace MantosExtract.Core.I18n
             ["me.settings.logout"] = "Sair",
             ["me.settings.logout.confirm"] = "Sair da sua conta neste computador?",
 
+            ["me.history.button"] = "Histórico",
+            ["me.history.back"] = "Voltar",
+            ["me.history.title"] = "Histórico de extrações",
+            ["me.history.empty"] = "Nenhuma extração ainda.",
+            ["me.history.table.date"] = "Data",
+            ["me.history.table.elements"] = "Elementos",
+            ["me.history.openFolder"] = "Abrir pasta",
+
             ["me.common.retry"] = "Tentar de novo",
             ["me.common.loading"] = "Carregando...",
             ["me.common.error.unknown"] = "Algo deu errado. Tente novamente.",
