@@ -121,6 +121,12 @@
   .kicker-fill{height:100%;width:40%;background:var(--red);animation:kick 1s cubic-bezier(.6,0,.4,1) infinite;}
   @keyframes kick{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
   @media (prefers-reduced-motion: reduce){.kicker-fill{animation-duration:2.4s;}}
+  /* Small inline variant of the kicker, for the currently-active row of the extraction
+     progress table — RunExtractAsync processes elements one at a time (sequential for-loop,
+     never Parallel), so only ONE row is ever mid-flight; the animation there is the only
+     honest "something is happening" signal while a single OpenAI call can take many seconds. */
+  .stage-inline{display:inline-flex;align-items:center;gap:6px;}
+  .kicker-track.sm{width:36px;height:6px;display:inline-block;vertical-align:middle;}
   .muted{color:var(--ink);opacity:.62;font-size:12px;}
   .caps{text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:11px;}
 
@@ -633,6 +639,7 @@
     confirmedIds: [],         // ids the operator checked on screen-select
     extractProgress: {},      // id -> {label, stage, ok}
     lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
+    screenBeforeSettings: null, // restored by settingsBack — see bug fix note there
   };
 
   // ---- credits badge ------------------------------------------------------
@@ -857,7 +864,7 @@
       nameCell.textContent = el ? el.label : id;
       var stateCell = document.createElement("td");
       stateCell.className = "stage";
-      stateCell.textContent = T("me.extract.progress.queued");
+      renderStageCell(stateCell, "queued", null);
       row.appendChild(nameCell); row.appendChild(stateCell);
       listEl.appendChild(row);
       state.extractProgress[id] = { label: el ? el.label : id, stage: "queued", ok: null };
@@ -865,6 +872,36 @@
     $("extractBarInner").style.width = "0%";
     showScreen("screen-extracting");
     send({cmd:"extract", ids: ids});
+  }
+
+  // Bug fix (Dave, 2026-09-07): the row used to be plain text ("extraindo...", "upscaling...")
+  // with nothing moving between stage updates — RunExtractAsync processes one element at a
+  // time and a single OpenAI call can take many seconds, so the screen looked frozen even
+  // though it genuinely was working (confirmed via docker.log). Reuses the same
+  // kicker-track/kicker-fill sliding-block language already established on screen-loading/
+  // screen-detecting, just sized down to fit a table cell — one consistent "something is
+  // happening" idiom across the whole app instead of inventing a new one.
+  function renderStageCell(stateCell, stage, ok){
+    if (stage === "done") {
+      stateCell.textContent = T(ok ? "me.extract.progress.done" : "me.extract.progress.failed");
+      return;
+    }
+    stateCell.innerHTML = "";
+    var wrap = document.createElement("span");
+    wrap.className = "stage-inline";
+    var label = document.createElement("span");
+    label.textContent = T("me.extract.progress." + stage);
+    wrap.appendChild(label);
+    if (stage !== "queued") {
+      var track = document.createElement("span");
+      track.className = "kicker-track sm";
+      track.setAttribute("aria-hidden", "true");
+      var fill = document.createElement("span");
+      fill.className = "kicker-fill";
+      track.appendChild(fill);
+      wrap.appendChild(track);
+    }
+    stateCell.appendChild(wrap);
   }
 
   function findDetected(id){
@@ -883,12 +920,8 @@
     var row = $("progress-" + msg.id);
     if (!row) return;
     var stateCell = row.querySelector(".stage");
-    if (msg.stage === "done") {
-      row.className = msg.ok ? "done" : "failed";
-      stateCell.textContent = T(msg.ok ? "me.extract.progress.done" : "me.extract.progress.failed");
-    } else {
-      stateCell.textContent = T("me.extract.progress." + msg.stage);
-    }
+    if (msg.stage === "done") row.className = msg.ok ? "done" : "failed";
+    renderStageCell(stateCell, msg.stage, msg.ok);
 
     var total = msg.total || 1;
     var doneCount = 0;
@@ -968,6 +1001,12 @@
 
   // ---- settings navigation -----------------------------------------------
   $("settingsBtn").addEventListener("click", function(){
+    // Bug fix (Dave, 2026-09-07): settingsBack used to hardcode showScreen("screen-home"),
+    // throwing the operator out of screen-extracting/screen-select/screen-result whenever they
+    // opened Settings mid-flow — the C# side keeps running regardless (RunExtractAsync doesn't
+    // care which screen is visible), so nothing was actually lost, but visually it looked like
+    // the batch had been abandoned. Remember whatever screen was actually showing.
+    state.screenBeforeSettings = SCREENS.filter(function(s){ return !$(s).hidden; })[0] || "screen-home";
     $("openaiKey").value = "";
     $("currentPassword").value = "";
     $("newPassword").value = "";
@@ -978,7 +1017,10 @@
     show("logoutBtn");
     showScreen("screen-settings");
   });
-  $("settingsBack").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
+  $("settingsBack").addEventListener("click", function(){
+    showScreen(state.screenBeforeSettings || "screen-home");
+    send({cmd:"status"});
+  });
 
   Array.prototype.forEach.call($("langRow").querySelectorAll("button"), function(btn){
     btn.classList.toggle("active", btn.getAttribute("data-lang") === window.MANTOSEXTRACT_LANG_KEY);

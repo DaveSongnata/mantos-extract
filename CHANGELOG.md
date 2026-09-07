@@ -6,6 +6,45 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-07 — Três bugs reais encontrados via `docker.log` da VM (primeira validação ponta a ponta)
+
+Dave testou de verdade dentro do CorelDRAW (v0.2.2/v0.3.0) e reportou três problemas — os dois
+primeiros por observação direta, o terceiro só ficou óbvio depois de eu ler o `docker.log` que
+ele colou (a extração parecia "ter funcionado" pra ele, mas os logs mostravam outra coisa).
+
+**1. Import no canvas falhando sempre (`CorelImporter.cs`) — o bug mais sério dos três.**
+`docker.log` mostrava, em toda extração, `COMException: Type mismatch (DISP_E_TYPEMISMATCH)` em
+`CorelImporter.Import` → `CorelHost.ImportPng`. Causa raiz: o código chamava
+`IVGLayer.Import(FileName, Filter?, Options?)` só com `pngPath` (1 argumento), assumindo que
+Corel toleraria omitir os dois parâmetros opcionais finais via `Type.InvokeMember` — o mesmo tipo
+de suposição que **já tinha derrubado `ExportEx`/`ExportBitmap`** em `CorelExporter.cs` (comentário
+do próprio arquivo: "Could not convert argument 0", SisCut e Optimus). A lição não tinha sido
+generalizada pro lado de import. Corrigido: `Import` agora recebe `application` também (pra poder
+chamar `CreateStructImportOptions()`, espelhando `CreateStructExportOptions()`/
+`CreateStructPaletteOptions()` do lado export) e passa os 3 argumentos posicionais sempre,
+explícitos — nunca omitir parâmetro opcional em chamada COM via `InvokeMember` neste projeto,
+ponto final. **Ainda não validado na VM depois do fix** — só build+teste unitário confirmam que
+compila; o teste de verdade (import realmente aparecer no canvas) é o próximo passo do Dave.
+
+**2. Botão "Voltar" de Configurações jogava pra Home, abandonando visualmente o fluxo em
+andamento.** Dave estava na tela de extração, abriu Configurações, voltou, e caiu na tela
+inicial — não porque a extração tivesse sido cancelada (o `RunExtractAsync` do lado C# continua
+rodando *independente* de qual tela está visível, `_running` não tem ideia de DOM), mas porque
+`settingsBack` chamava `showScreen("screen-home")` incondicional, sem nenhum conceito de "tela
+anterior". Corrigido: `settingsBtn` agora grava qual tela estava visível antes de abrir
+Configurações (`state.screenBeforeSettings`), e `settingsBack` restaura exatamente essa tela.
+
+**3. Tela de extração parecia travada.** `RunExtractAsync` processa os elementos confirmados um
+de cada vez (for sequencial, nunca `Parallel`/`Task.WhenAll`) — uma chamada de extração na OpenAI
+pode levar vários segundos, e nesse intervalo a linha da tabela só mostrava texto estático
+("extraindo...", "upscaling..."), sem nada se mexendo. Corrigido: a linha atualmente em
+andamento (stage ≠ "queued"/"done") ganhou o mesmo indicador "kicker" (barrinha deslizante) já
+usado em `screen-loading`/`screen-detecting` — reaproveitado, não reinventado, então o app tem UM
+idioma visual de "algo está acontecendo", não dois.
+
+`dotnet build`: 0/0. `dotnet test`: 314/314 verdes (sem mudança de contagem — os três fixes são
+lógica de COM/DOM, não cobertos por teste unitário puro). `node scripts/check-ui-js.js`: ok.
+
 ## 2026-09-07 — Reversão de M2: Mantos Extract não debita mais crédito
 
 Decisão de produto do Dave (não técnica minha — ele que pediu a mudança e definiu o motivo).

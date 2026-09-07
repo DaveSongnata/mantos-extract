@@ -21,17 +21,21 @@ namespace MantosExtract.Interop
         /// <summary>Imports <paramref name="pngPath"/> into <paramref name="document"/>'s
         /// active layer and returns the imported shape (as <c>dynamic</c>) at whatever
         /// position/size Corel gave it.</summary>
-        public static dynamic Import(dynamic document, string pngPath)
+        public static dynamic Import(dynamic application, dynamic document, string pngPath)
         {
             dynamic layer = document.ActiveLayer;
 
-            // Import(FileName, Filter?, Options?) — both optional args omitted: Corel infers
-            // the filter from the .png extension, and default StructImportOptions is what every
-            // interactive File > Import does. If a future Corel build refuses the 1-arg call the
-            // same way ExportEx once refused a missing struct, add a StructImportOptions here
-            // (Application.CreateStructImportOptions(), confirmed to exist in the typelib) —
-            // not done preemptively because it is unconfirmed which fields it needs.
-            InvokeMember((object)layer, "Import", new object[] { pngPath });
+            // Bug fix (Dave, 2026-09-07 — confirmed by real docker.log on the VM):
+            // "COMException: Type mismatch (DISP_E_TYPEMISMATCH)" on every single Import call.
+            // The previous code omitted both trailing optional args (Filter?, Options?),
+            // assuming Corel's IDispatch would tolerate cArgs < full parameter count the way the
+            // OLE Automation spec technically allows. It does not — this is the EXACT same
+            // category of failure CorelExporter.cs already hit twice (ExportEx/ExportBitmap) and
+            // fixed by always supplying every positional parameter explicitly. Import gets the
+            // same treatment: never omit a trailing optional COM parameter via InvokeMember.
+            dynamic options = application.CreateStructImportOptions();
+            InvokeMember((object)layer, "Import",
+                new object[] { pngPath, CorelConstants.CdrFilterPng, (object)options });
 
             dynamic? imported = ResolveImportedShape(document, layer);
             if (imported == null)

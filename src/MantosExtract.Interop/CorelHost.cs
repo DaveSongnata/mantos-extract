@@ -67,7 +67,7 @@ namespace MantosExtract.Interop
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ImportPng(string pngPath)
         {
             using var _ = new CorelDocumentState(_app);
-            dynamic imported = CorelImporter.Import(_app.ActiveDocument, pngPath);
+            dynamic imported = CorelImporter.Import(_app, _app.ActiveDocument, pngPath);
             _lastImportedShape = imported;
             return ReadBoundsMm(imported);
         }
