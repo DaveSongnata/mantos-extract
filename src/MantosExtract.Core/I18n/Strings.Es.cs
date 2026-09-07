@@ -18,10 +18,6 @@ namespace MantosExtract.Core.I18n
             ["me.login.error.emailRequired"] = "Ingrese su correo electrónico.",
             ["me.login.error.passwordRequired"] = "Ingrese su contraseña.",
 
-            ["me.home.credits.label"] = "{0} créditos",
-            ["me.home.credits.one"] = "1 crédito",
-            ["me.home.credits.zero"] = "Sin créditos",
-            ["me.home.credits.unit"] = "créd.",
             ["me.home.settings.button"] = "Configuración",
             ["me.home.empty.title"] = "Próximamente",
             ["me.home.empty.body"] = "La extracción de elementos llega en la próxima etapa de este proyecto.",

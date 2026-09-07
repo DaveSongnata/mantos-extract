@@ -192,7 +192,6 @@ namespace MantosExtract.AddIn.Ui
                 screen = "home",
                 email = session.Email,
                 role = session.Role,
-                credits = session.CreditsRemaining,
                 warning = result.WarningMessage,
                 hasOpenAiKey = _credentials.LoadOpenAiKey() != null,
                 extractionQuality = ExtractionQualityStore.Read(),
@@ -318,8 +317,6 @@ namespace MantosExtract.AddIn.Ui
                 imageUrl = "https://mantosextract.assets/" + assetName,
                 elements = MapElementsForPage(result.Elements),
             });
-
-            await RefreshCreditsAsync(session, ct).ConfigureAwait(false);
         }
 
         private static object[] MapElementsForPage(IReadOnlyList<DetectedElement> elements)
@@ -473,7 +470,6 @@ namespace MantosExtract.AddIn.Ui
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
             Post(new { type = "extract", done = true, succeeded, failed });
-            await RefreshCreditsAsync(session, ct).ConfigureAwait(false);
         }
 
         private static void TryDelete(string path)
@@ -484,7 +480,7 @@ namespace MantosExtract.AddIn.Ui
 
         /// <summary>Runs the upscale step and degrades gracefully (M5 / plans/Phase_4.md): any
         /// non-success status returns the ORIGINAL extracted PNG unchanged rather than blocking
-        /// the element — the operator already paid the extraction credit for it.</summary>
+        /// the element.</summary>
         private string ApplyUpscale(string extractedPngPath, string elementId)
         {
             UpscaleResult upscale = _upscaleRunner.Run(extractedPngPath);
@@ -510,23 +506,6 @@ namespace MantosExtract.AddIn.Ui
             foreach (string id in ids)
                 if (byId.TryGetValue(id, out DetectedElement? el)) confirmed.Add(el);
             return confirmed;
-        }
-
-        private async Task RefreshCreditsAsync(SessionState session, CancellationToken ct)
-        {
-            try
-            {
-                MeResponse me = await _authClient.GetMeAsync(session.SessionId, ct).ConfigureAwait(false);
-                session.CreditsRemaining = me.CreditsRemaining;
-                _credentials.SaveSession(session);
-                Post(new { type = "credits", credits = me.CreditsRemaining });
-            }
-            catch (Exception ex)
-            {
-                // Best effort — the operator already saw the result of their action; a failed
-                // credit refresh is a stale badge, never a reason to re-show an error banner.
-                MantosExtractLog.Write("RefreshCreditsAsync FAILED: " + ex.Message);
-            }
         }
 
         // ---- history (Dave, 2026-09-07 — "nem precisaríamos de banco de dados se as pastas

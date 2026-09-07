@@ -6,6 +6,6 @@ namespace MantosExtract.AddIn
     /// </summary>
     internal static class Build
     {
-        public const string Tag = "0.3.4";
+        public const string Tag = "0.3.5";
     }
 }

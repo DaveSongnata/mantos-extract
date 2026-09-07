@@ -85,16 +85,6 @@
   }
   .brand .tab{width:10px;height:18px;background:var(--red);flex:none;}
   .topbar-right{display:flex;align-items:stretch;}
-  .credits-badge{
-    display:none;align-items:center;gap:6px;padding:0 12px;
-    background:var(--red);color:var(--surface);
-    font-family:var(--font);font-weight:900;font-variant-numeric:tabular-nums;
-    border-left:var(--lw) solid var(--ink);
-  }
-  .credits-badge[data-show="1"]{display:flex;}
-  .credits-badge .n{font-size:16px;}
-  .credits-badge .u{font-size:8px;letter-spacing:.06em;text-transform:uppercase;font-family:var(--font-body);font-weight:700;opacity:.9;}
-  .credits-badge.zero{background:var(--surface);color:var(--ink);}
   .icon-btn{
     display:inline-flex;align-items:center;justify-content:center;
     width:40px;border:none;border-left:var(--lw) solid var(--ink);
@@ -396,7 +386,6 @@
   <div class="topbar">
     <div class="brand"><span class="tab" aria-hidden="true"></span><span data-i18n="me.app.title">Mantos Extract</span></div>
     <div class="topbar-right">
-      <span id="creditsBadge" class="credits-badge"><span class="n"></span><span class="u" data-i18n="me.home.credits.unit">créd.</span></span>
       <button id="historyBtn" class="icon-btn" type="button" data-i18n-title="me.history.button" title="Histórico" hidden>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
       </button>
@@ -718,21 +707,10 @@
     extractProgressTimer: null,
   };
 
-  // ---- credits badge ------------------------------------------------------
-  function renderCredits(n){
-    var badge = $("creditsBadge");
-    badge.querySelector(".n").textContent = n;
-    badge.classList.toggle("zero", n <= 0);
-    badge.setAttribute("data-show", "1");
-    $("settingsBtn").hidden = false;
-    $("historyBtn").hidden = false;
-  }
-
   // ---- auth screens ---------------------------------------------------------
   function renderLogin(error){
     if (error) { $("loginErrorText").textContent = error; show("loginError"); }
     else hide("loginError");
-    $("creditsBadge").removeAttribute("data-show");
     $("settingsBtn").hidden = true;
     $("historyBtn").hidden = true;
     showScreen("screen-login");
@@ -745,7 +723,8 @@
     state.extractionQuality = QUALITY_LEVELS.indexOf(msg.extractionQuality) >= 0 ? msg.extractionQuality : "medium";
     state.hasOpenAiKey = !!msg.hasOpenAiKey;
     $("homeEmail").textContent = msg.email || "";
-    renderCredits(msg.credits || 0);
+    $("settingsBtn").hidden = false;
+    $("historyBtn").hidden = false;
     if (msg.warning) { $("homeWarningText").textContent = msg.warning; show("homeWarning"); }
     else hide("homeWarning");
     hide("homeError");
@@ -815,9 +794,6 @@
         break;
       case "status":
         onStatus(msg);
-        break;
-      case "credits":
-        renderCredits(msg.credits || 0);
         break;
       case "history":
         onHistory(msg);
