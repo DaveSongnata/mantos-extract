@@ -17,7 +17,6 @@ namespace MantosExtract.Core.Tests.Extract
                 Total = 3,
                 Succeeded = 2,
                 Failed = 1,
-                SkippedNoCredits = 0,
                 Elements = new List<ExtractionBatchManifestElement>
                 {
                     new ExtractionBatchManifestElement { Id = "el_1", Label = "Logo PR", FileName = "logo_pr.png", Ok = true },
@@ -34,7 +33,6 @@ namespace MantosExtract.Core.Tests.Extract
             Assert.Equal(manifest.Total, restored.Total);
             Assert.Equal(manifest.Succeeded, restored.Succeeded);
             Assert.Equal(manifest.Failed, restored.Failed);
-            Assert.Equal(manifest.SkippedNoCredits, restored.SkippedNoCredits);
             Assert.Equal(manifest.Elements.Count, restored.Elements.Count);
             for (int i = 0; i < manifest.Elements.Count; i++)
             {
@@ -55,7 +53,6 @@ namespace MantosExtract.Core.Tests.Extract
                 Total = 0,
                 Succeeded = 0,
                 Failed = 0,
-                SkippedNoCredits = 0,
                 Elements = new List<ExtractionBatchManifestElement>(),
             };
 

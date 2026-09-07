@@ -21,8 +21,8 @@ namespace MantosExtract.Core.Extract
     /// Filesystem-as-database (Dave, 2026-09-07): one of these lives as <c>batch.json</c> inside
     /// each extraction batch folder (see <see cref="ExtractionBatchNaming"/>) — the WHOLE
     /// history screen is just "enumerate folders, deserialize each manifest", no database
-    /// anywhere. Always written, even for a batch that stopped early (E_NO_CREDITS mid-loop) —
-    /// it reflects whatever actually happened, partial or complete.
+    /// anywhere. Always written at the end of the batch, reflecting whatever actually happened,
+    /// partial or complete.
     /// </summary>
     public sealed class ExtractionBatchManifest
     {
@@ -31,7 +31,6 @@ namespace MantosExtract.Core.Extract
         public int Total { get; set; }
         public int Succeeded { get; set; }
         public int Failed { get; set; }
-        public int SkippedNoCredits { get; set; }
         public List<ExtractionBatchManifestElement> Elements { get; set; } = new List<ExtractionBatchManifestElement>();
 
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions

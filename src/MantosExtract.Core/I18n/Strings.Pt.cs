@@ -36,6 +36,7 @@ namespace MantosExtract.Core.I18n
             ["me.settings.openai.save"] = "Salvar chave",
             ["me.settings.openai.saved"] = "Chave salva.",
             ["me.settings.openai.empty"] = "Nenhuma chave salva ainda.",
+            ["me.settings.openai.nudge"] = "Opa... falta uma chave aqui!",
             ["me.settings.quality.label"] = "Qualidade da extração",
             ["me.settings.quality.help"] = "Mais qualidade = resultado mais nítido, custo maior por elemento. Padrão já cobre a maioria dos casos.",
             ["me.settings.quality.low"] = "Rápida",
@@ -95,14 +96,9 @@ namespace MantosExtract.Core.I18n
             ["me.extract.result.title"] = "Elementos extraídos",
             ["me.extract.result.summary"] = "{0} de {1} elementos extraídos com sucesso",
             ["me.extract.result.newImage"] = "Extrair outra imagem",
-            ["me.extract.result.skippedNoCredits"] = "{0} elemento(s) não foram extraídos por falta de crédito.",
 
             ["me.error.network.title"] = "Não conseguimos conectar",
             ["me.error.network.body"] = "Verifique sua internet e tente de novo.",
-
-            ["me.credits.zero.title"] = "Seus créditos acabaram",
-            ["me.credits.zero.body"] = "Fale com sua confecção para liberar mais créditos.",
-            ["me.credits.zero.contact"] = "Peça ao responsável pela sua confecção para renovar o plano no painel do mantosfc.",
         };
     }
 }

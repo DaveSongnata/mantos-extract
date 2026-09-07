@@ -36,6 +36,7 @@ namespace MantosExtract.Core.I18n
             ["me.settings.openai.save"] = "Save key",
             ["me.settings.openai.saved"] = "Key saved.",
             ["me.settings.openai.empty"] = "No key saved yet.",
+            ["me.settings.openai.nudge"] = "Whoops... key missing!",
             ["me.settings.quality.label"] = "Extraction quality",
             ["me.settings.quality.help"] = "Higher quality = sharper result, higher cost per element. Standard already covers most cases.",
             ["me.settings.quality.low"] = "Fast",
@@ -95,14 +96,9 @@ namespace MantosExtract.Core.I18n
             ["me.extract.result.title"] = "Extracted elements",
             ["me.extract.result.summary"] = "{0} of {1} elements extracted successfully",
             ["me.extract.result.newImage"] = "Extract another image",
-            ["me.extract.result.skippedNoCredits"] = "{0} element(s) were not extracted — out of credits.",
 
             ["me.error.network.title"] = "We couldn't connect",
             ["me.error.network.body"] = "Check your internet connection and try again.",
-
-            ["me.credits.zero.title"] = "You're out of credits",
-            ["me.credits.zero.body"] = "Talk to your shop to unlock more credits.",
-            ["me.credits.zero.contact"] = "Ask whoever manages your shop's account to renew the plan on the mantosfc panel.",
         };
     }
 }

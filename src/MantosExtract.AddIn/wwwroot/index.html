@@ -175,6 +175,22 @@
   .quality-ticks span{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--gray);}
   .quality-ticks span.active{color:var(--red);}
 
+  /* ---- aviso "falta chave" (Dave, 2026-09-07) — curto, direto, uma entrada só, nunca um
+     parágrafo explicando o óbvio. Bloco sólido tipo carimbo, sem gradiente/sombra. ---------- */
+  .nudge{
+    display:flex;align-items:center;gap:9px;background:var(--ink);color:var(--paper);
+    border:var(--lw) solid var(--ink);padding:11px 12px;margin-bottom:14px;
+  }
+  .nudge.play{animation:nudge-in .3s cubic-bezier(.2,.8,.2,1);}
+  @keyframes nudge-in{0%{transform:translateY(-10px) scale(.97);opacity:0;}100%{transform:translateY(0) scale(1);opacity:1;}}
+  @media (prefers-reduced-motion: reduce){.nudge.play{animation:none;}}
+  .nudge-mark{
+    flex:0 0 auto;width:22px;height:22px;background:var(--red);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font);font-weight:900;font-size:14px;
+  }
+  .nudge-text{font-family:var(--font);font-weight:900;text-transform:uppercase;font-size:12.5px;letter-spacing:.02em;}
+
   /* ---- botões (retângulo sólido, sem raio, sem sombra) ------------------------------ */
   button{border-radius:0;}
   button.primary{
@@ -184,6 +200,10 @@
   }
   button.primary:hover{background:var(--ink);}
   button.primary:disabled{background:var(--gray-light);color:var(--gray);border-color:var(--gray);cursor:default;}
+  /* Looks locked but stays clickable — Detectar without a saved OpenAI key redirects to
+     Configurações instead of silently failing later (Dave, 2026-09-07). */
+  button.primary.needs-key{background:var(--gray-light);color:var(--ink);border-color:var(--ink);}
+  button.primary.needs-key:hover{background:var(--red);color:var(--surface);}
   button.secondary{
     width:100%;background:var(--surface);color:var(--ink);border:var(--lw) solid var(--ink);
     font-family:var(--font);font-weight:900;text-transform:uppercase;letter-spacing:.02em;font-size:12px;
@@ -337,13 +357,13 @@
   .dtable .mark{width:16px;height:16px;display:inline-block;vertical-align:-3px;}
   .result-summary{font-size:12px;text-align:center;font-weight:700;}
 
-  /* ---- erro / créditos zero (4.7 / 4.8) --------------------------------------------------- */
+  /* ---- erro de rede (4.7) — screen 4.8 (créditos zero) retirada 2026-09-07 junto com o
+     débito de crédito em si (M2 revogada): o servidor não devolve mais E_NO_CREDITS pra
+     detectar/extrair. -------------------------------------------------------------------- */
   .full-message{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:26px 16px;}
   .full-message .icon-block{width:64px;height:64px;display:flex;align-items:center;justify-content:center;border:var(--lw) solid var(--ink);}
   .full-message.error .icon-block{background:var(--red);}
   .full-message.error .icon-block svg{color:var(--surface);}
-  .full-message.credits .icon-block{background:var(--ink);}
-  .full-message.credits .icon-block svg{color:var(--surface);}
   .full-message .title{font-family:var(--font);font-weight:900;text-transform:uppercase;font-size:15px;letter-spacing:.01em;}
   .full-message .body{opacity:.7;font-size:12px;max-width:28ch;}
   .full-message .actions{width:100%;display:flex;flex-direction:column;gap:8px;margin-top:4px;}
@@ -512,12 +532,6 @@
         </table>
       </div>
       <div class="result-summary" id="resultSummary"></div>
-      <div id="resultSkippedNote" class="banner banner-warn" hidden>
-        <span class="tag" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 3 2 20h20L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
-        </span>
-        <span class="msg"><span id="resultSkippedText"></span></span>
-      </div>
       <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
       <button type="button" id="resultNewImageBtn" class="primary" data-i18n="me.extract.result.newImage">Extrair outra imagem</button>
     </section>
@@ -538,19 +552,6 @@
       </details>
     </section>
 
-    <!-- 4.8: créditos zero -->
-    <section id="screen-credits-zero" hidden class="full-message credits">
-      <div class="icon-block" aria-hidden="true">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="3" width="10" height="18" rx="1.5"/></svg>
-      </div>
-      <div class="title" data-i18n="me.credits.zero.title">Seus créditos acabaram</div>
-      <div class="body" data-i18n="me.credits.zero.body">Fale com sua confecção para liberar mais créditos.</div>
-      <div class="body" style="font-size:11px;" data-i18n="me.credits.zero.contact"></div>
-      <div class="actions">
-        <button type="button" id="creditsZeroBackBtn" class="secondary" data-i18n="me.select.backButton">Selecionar outra imagem</button>
-      </div>
-    </section>
-
     <!-- configurações -->
     <section id="screen-settings" hidden>
       <div class="settings-header">
@@ -569,6 +570,10 @@
 
       <div class="divider"></div>
 
+      <div id="noKeyNudge" class="nudge" hidden>
+        <span class="nudge-mark" aria-hidden="true">!</span>
+        <span class="nudge-text" data-i18n="me.settings.openai.nudge">Opa... falta uma chave aqui!</span>
+      </div>
       <label for="openaiKey" data-i18n="me.settings.openai.label">Chave da OpenAI</label>
       <p class="help-text" data-i18n="me.settings.openai.help">Sua confecção usa a própria chave da OpenAI para detectar e extrair as imagens. Cole aqui uma vez só.</p>
       <div class="field">
@@ -682,7 +687,7 @@
   function hide(id){ $(id).hidden = true; }
 
   var SCREENS = ["screen-loading","screen-login","screen-home","screen-detecting","screen-select",
-                 "screen-extracting","screen-result","screen-error","screen-credits-zero","screen-settings",
+                 "screen-extracting","screen-result","screen-error","screen-settings",
                  "screen-history"];
   function showScreen(id){
     SCREENS.forEach(function(s){ $(s).hidden = (s !== id); });
@@ -708,6 +713,10 @@
     screenBeforeSettings: null, // restored by settingsBack — see bug fix note there
     screenBeforeHistory: null,  // same pattern, for historyBack (screen-history)
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
+    extractRealPct: 0,       // last CONFIRMED batch progress (from real extractProgress events)
+    extractCreepPct: 0,      // what extractBarInner actually shows — creeps toward, never past, the next slot
+    extractTotalCount: 1,
+    extractProgressTimer: null,
   };
 
   // ---- credits badge ------------------------------------------------------
@@ -735,6 +744,7 @@
 
   function renderHome(msg){
     state.extractionQuality = QUALITY_LEVELS.indexOf(msg.extractionQuality) >= 0 ? msg.extractionQuality : "medium";
+    state.hasOpenAiKey = !!msg.hasOpenAiKey;
     $("homeEmail").textContent = msg.email || "";
     renderCredits(msg.credits || 0);
     if (msg.warning) { $("homeWarningText").textContent = msg.warning; show("homeWarning"); }
@@ -763,6 +773,10 @@
       window.applyI18n(box);
     }
     $("detectBtn").disabled = !state.selIsBitmap;
+    // Minor fix (Dave, 2026-09-07): stays clickable (real `disabled` would swallow the click
+    // and give the operator zero feedback) — just looks locked, and the click handler below
+    // redirects to Configurações with a nudge instead of silently failing server-side later.
+    $("detectBtn").classList.toggle("needs-key", state.selIsBitmap && !state.hasOpenAiKey);
   }
 
   // ---- receive from C# -----------------------------------------------------
@@ -774,7 +788,12 @@
         else renderLogin(msg.error);
         break;
       case "openaiKey":
-        if (msg.ok) { show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500); }
+        if (msg.ok) {
+          state.hasOpenAiKey = !!msg.saved;
+          updateHomeEmptyState();
+          if (state.hasOpenAiKey) hide("noKeyNudge");
+          show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500);
+        }
         break;
       case "extractionQuality":
         if (msg.ok) {
@@ -834,6 +853,7 @@
   // ---- detect flow (Fase 2) ------------------------------------------------
 
   $("detectBtn").addEventListener("click", function(){
+    if (!state.hasOpenAiKey) { openSettings({nudgeKey: true}); return; }
     showScreen("screen-detecting");
     $("detectingThumb").hidden = true;
     send({cmd:"detect"});
@@ -951,9 +971,39 @@
       listEl.appendChild(row);
       state.extractProgress[id] = { label: el ? el.label : id, stage: "queued", ok: null };
     });
+    state.extractRealPct = 0;
+    state.extractCreepPct = 0;
+    state.extractTotalCount = ids.length || 1;
     $("extractBarInner").style.width = "0%";
+    startProgressCreep();
     showScreen("screen-extracting");
     send({cmd:"extract", ids: ids});
+  }
+
+  // Bug fix (Dave, 2026-09-07): "a barra tem que se mexer" — extractBarInner used to only
+  // jump in discrete steps when a real extractProgress event arrived, so it sat dead-still for
+  // however many seconds a single OpenAI call takes (same root cause as the per-row kicker
+  // fix above, different symptom: the OVERALL bar, not a single row). Same trick already used
+  // in installer/wwwroot/index.html's install screen (and SisCut's own progress screens): the
+  // bar creeps continuously on a timer toward a soft ceiling — up to ~70% of the way into the
+  // NEXT element's slot, never past it — so it always looks alive without ever claiming an
+  // element is more done than it really is. Real events (onExtractProgress) can only push
+  // extractRealPct/extractCreepPct FORWARD, never let the creep overtake genuine progress.
+  var REDUCED_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function startProgressCreep(){
+    stopProgressCreep();
+    if (REDUCED_MOTION) return; // real jumps only — no simulated motion for this operator
+    state.extractProgressTimer = setInterval(function(){
+      var slot = 100 / state.extractTotalCount;
+      var ceiling = Math.min(100, state.extractRealPct + slot * 0.7);
+      if (state.extractCreepPct < ceiling) {
+        state.extractCreepPct = Math.min(ceiling, state.extractCreepPct + 0.6);
+        $("extractBarInner").style.width = state.extractCreepPct + "%";
+      }
+    }, 120);
+  }
+  function stopProgressCreep(){
+    if (state.extractProgressTimer) { clearInterval(state.extractProgressTimer); state.extractProgressTimer = null; }
   }
 
   // Bug fix (Dave, 2026-09-07): the row used to be plain text ("extraindo...", "upscaling...")
@@ -1008,10 +1058,18 @@
     var total = msg.total || 1;
     var doneCount = 0;
     Object.keys(state.extractProgress).forEach(function(id){ if (state.extractProgress[id].ok !== null) doneCount++; });
-    $("extractBarInner").style.width = Math.round((doneCount/total)*100) + "%";
+    state.extractTotalCount = total;
+    state.extractRealPct = Math.round((doneCount/total)*100);
+    if (state.extractCreepPct < state.extractRealPct || REDUCED_MOTION) state.extractCreepPct = state.extractRealPct;
+    $("extractBarInner").style.width = state.extractCreepPct + "%";
   }
 
   function onExtractDone(msg){
+    stopProgressCreep();
+    state.extractRealPct = 100;
+    state.extractCreepPct = 100;
+    $("extractBarInner").style.width = "100%";
+
     var listEl = $("resultList");
     listEl.innerHTML = "";
     state.lastFailedIds = [];
@@ -1031,12 +1089,7 @@
     });
 
     $("resultSummary").textContent = T("me.extract.result.summary", msg.succeeded || 0,
-      (msg.succeeded||0) + (msg.failed||0) + (msg.skippedNoCredits||0));
-
-    if (msg.skippedNoCredits > 0) {
-      $("resultSkippedText").textContent = T("me.extract.result.skippedNoCredits", msg.skippedNoCredits);
-      show("resultSkippedNote");
-    } else hide("resultSkippedNote");
+      (msg.succeeded||0) + (msg.failed||0));
 
     $("resultRetryFailedBtn").hidden = state.lastFailedIds.length === 0;
     showScreen("screen-result");
@@ -1044,15 +1097,15 @@
 
   $("resultRetryFailedBtn").addEventListener("click", function(){ beginExtraction(state.lastFailedIds.slice()); });
   $("resultNewImageBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
-  $("creditsZeroBackBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
   $("errorRetryBtn").addEventListener("click", function(){ showScreen("screen-home"); send({cmd:"status"}); });
 
   // ---- shared error routing --------------------------------------------------
-  // detect/extract failures land on one of three places depending on the server's code:
-  // out of credits -> 4.8, network -> 4.7 (with raw detail collapsed), anything else -> an
-  // inline banner via the caller's own fallback (never leaves the operator on a blank screen).
+  // detect/extract failures land on one of two places depending on the server's code: network
+  // -> 4.7 (with raw detail collapsed), anything else -> an inline banner via the caller's own
+  // fallback (never leaves the operator on a blank screen). Screen 4.8 (créditos zero) was
+  // retired 2026-09-07 along with the credit debit itself (M2 revogada) — the server can no
+  // longer return E_NO_CREDITS for detect/extract, so that branch was dead code.
   function handleActionError(msg, fallback){
-    if (msg.code === "E_NO_CREDITS") { showScreen("screen-credits-zero"); return; }
     if (msg.code === "E_NETWORK") {
       $("errorBody").textContent = msg.error || T("me.error.network.body");
       $("errorTechDetails").textContent = msg.code + ": " + (msg.error || "");
@@ -1082,7 +1135,7 @@
   });
 
   // ---- settings navigation -----------------------------------------------
-  $("settingsBtn").addEventListener("click", function(){
+  function openSettings(opts){
     // Bug fix (Dave, 2026-09-07): settingsBack used to hardcode showScreen("screen-home"),
     // throwing the operator out of screen-extracting/screen-select/screen-result whenever they
     // opened Settings mid-flow — the C# side keeps running regardless (RunExtractAsync doesn't
@@ -1099,8 +1152,21 @@
     hide("passwordChanged");
     hide("logoutConfirm");
     show("logoutBtn");
+    hide("noKeyNudge");
     showScreen("screen-settings");
-  });
+    // "Opa... falta uma chave aqui!" (Dave, 2026-09-07) — Detectar redirects here when no key
+    // is saved yet; re-trigger the CSS entrance animation each time by removing+re-adding the
+    // element from layout (a hidden→visible toggle alone would replay it too, but restarting on
+    // every visit, even repeat ones, is the point — reflow via offsetWidth forces that).
+    if (opts && opts.nudgeKey) {
+      var nudge = $("noKeyNudge");
+      nudge.hidden = false;
+      void nudge.offsetWidth;
+      nudge.classList.remove("play"); void nudge.offsetWidth; nudge.classList.add("play");
+      $("openaiKey").focus();
+    }
+  }
+  $("settingsBtn").addEventListener("click", function(){ openSettings(); });
   function updateQualityTicks(){
     var idx = Number($("qualitySlider").value);
     Array.prototype.forEach.call($("qualityTicks").querySelectorAll("span"), function(el, i){

@@ -379,23 +379,10 @@ namespace MantosExtract.AddIn.Ui
             Directory.CreateDirectory(batchDir);
             var manifestElements = new List<ExtractionBatchManifestElement>();
 
-            int succeeded = 0, failed = 0, skippedNoCredits = 0;
-            bool stopBatch = false;
+            int succeeded = 0, failed = 0;
 
             for (int i = 0; i < confirmed.Count; i++)
             {
-                if (stopBatch)
-                {
-                    // Never attempted — the row must still reach a terminal UI state (it
-                    // started as "queued" and would otherwise stay stuck there forever once
-                    // the batch's final "extract" message arrives).
-                    skippedNoCredits++;
-                    manifestElements.Add(new ExtractionBatchManifestElement
-                    { Id = confirmed[i].Id, Label = confirmed[i].Label, FileName = null, Ok = false });
-                    Post(new { type = "extractProgress", id = confirmed[i].Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = "E_NO_CREDITS" });
-                    continue;
-                }
-
                 DetectedElement element = confirmed[i];
                 Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "extracting" });
 
@@ -455,20 +442,6 @@ namespace MantosExtract.AddIn.Ui
 
                     if (ex.Code == "E_UNAUTHORIZED") { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
 
-                    if (ex.Code == "E_NO_CREDITS")
-                    {
-                        // Server never charges a non-2xx (credit_check_middleware.ts) — the
-                        // remaining elements in the batch are correctly un-attempted, not
-                        // "failed": docs/mantos-extract-spec.md §6, "avisa quantos ficaram de
-                        // fora, não cobra os que não rodaram".
-                        stopBatch = true;
-                        skippedNoCredits++;
-                        manifestElements.Add(new ExtractionBatchManifestElement
-                        { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
-                        Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
-                        continue;
-                    }
-
                     failed++;
                     manifestElements.Add(new ExtractionBatchManifestElement
                     { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
@@ -494,13 +467,12 @@ namespace MantosExtract.AddIn.Ui
                 Total = confirmed.Count,
                 Succeeded = succeeded,
                 Failed = failed,
-                SkippedNoCredits = skippedNoCredits,
                 Elements = manifestElements,
             };
             try { File.WriteAllText(Path.Combine(batchDir, "batch.json"), manifest.ToJson()); }
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
-            Post(new { type = "extract", done = true, succeeded, failed, skippedNoCredits });
+            Post(new { type = "extract", done = true, succeeded, failed });
             await RefreshCreditsAsync(session, ct).ConfigureAwait(false);
         }
 

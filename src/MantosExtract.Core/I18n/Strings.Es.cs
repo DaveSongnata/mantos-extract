@@ -36,6 +36,7 @@ namespace MantosExtract.Core.I18n
             ["me.settings.openai.save"] = "Guardar clave",
             ["me.settings.openai.saved"] = "Clave guardada.",
             ["me.settings.openai.empty"] = "Aún no hay ninguna clave guardada.",
+            ["me.settings.openai.nudge"] = "¡Epa... falta una clave aquí!",
             ["me.settings.quality.label"] = "Calidad de la extracción",
             ["me.settings.quality.help"] = "Más calidad = resultado más nítido, mayor costo por elemento. El nivel estándar cubre la mayoría de los casos.",
             ["me.settings.quality.low"] = "Rápida",
@@ -95,14 +96,9 @@ namespace MantosExtract.Core.I18n
             ["me.extract.result.title"] = "Elementos extraídos",
             ["me.extract.result.summary"] = "{0} de {1} elementos extraídos con éxito",
             ["me.extract.result.newImage"] = "Extraer otra imagen",
-            ["me.extract.result.skippedNoCredits"] = "{0} elemento(s) no se extrajeron por falta de crédito.",
 
             ["me.error.network.title"] = "No pudimos conectar",
             ["me.error.network.body"] = "Verifique su internet e intente de nuevo.",
-
-            ["me.credits.zero.title"] = "Sus créditos se acabaron",
-            ["me.credits.zero.body"] = "Hable con su confección para liberar más créditos.",
-            ["me.credits.zero.contact"] = "Pida al responsable de su confección que renueve el plan en el panel de mantosfc.",
         };
     }
 }

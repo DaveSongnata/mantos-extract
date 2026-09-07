@@ -6,6 +6,44 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-07 — Três ajustes de polimento: crédito morto removido, barra de progresso viva, aviso de chave
+
+**1. Código morto de crédito removido de vez.** A reversão de M2 (entrada anterior) deixou o
+caminho REATIVO intocado de propósito (`E_NO_CREDITS`/`screen-credits-zero`/`skippedNoCredits`)
+por não ter sido pedido explicitamente — mas o servidor nunca mais devolve esse código pra
+detectar/extrair, então virou lógica inalcançável. Dave apontou a inconsistência ("achei que
+tínhamos aposentado isso?") e pediu a limpeza: removidos `stopBatch`/`skippedNoCredits` de
+`RunExtractAsync`, o campo `SkippedNoCredits` do manifesto, a tela 4.8 inteira
+(`screen-credits-zero`), o banner `resultSkippedNote`, e as 4 chaves i18n órfãs. `RefreshCreditsAsync`/
+badge de crédito na Home **não foram tocados** — aquilo é saldo real da conta (usado por outros
+produtos do mantosfc), não relacionado ao Mantos Extract especificamente.
+
+**2. Barra de progresso da extração ganhou movimento contínuo.** O indicador por linha (entrada
+anterior) ajudou, mas Dave pediu explicitamente que a barra GERAL também se mexesse — "já
+fizemos algo parecido no próprio instalador". Confirmado lendo `installer/wwwroot/index.html`:
+o wizard não liga a barra diretamente a eventos reais, ele anima uma porcentagem simulada
+continuamente e só reconcilia com o resultado real no fim. Adaptado pra extração (que TEM
+eventos reais, diferente do instalador): `extractBarInner` agora "rasteja" (`setInterval` de
+120ms) continuamente até um teto suave — no máximo 70% do caminho até o PRÓXIMO elemento —
+nunca ultrapassando o progresso real confirmado. Eventos reais (`onExtractProgress`) só empurram
+o alvo pra FRENTE, nunca deixam o rastejo alegar mais progresso do que realmente aconteceu.
+Respeita `prefers-reduced-motion` (sem rastejo simulado, só saltos reais).
+
+**3. Botão "Detectar" sem chave OpenAI salva agora guia o operador, em vez de falhar
+silenciosamente depois.** Antes: o botão ficava habilitado sem chave, e só ao clicar (e esperar
+a rede) o operador descobria o problema via banner de erro. Agora: visualmente "trancado" (cinza,
+mas **propositalmente sem o atributo `disabled` de verdade** — continua clicável, porque um
+botão disabled de verdade não dispara clique nenhum, e o objetivo é justamente reagir ao clique)
+quando `state.hasOpenAiKey` é falso; ao clicar, redireciona pra Configurações com um aviso curto
+e animado ("Opa... falta uma chave aqui!", `me.settings.openai.nudge`) e foca o campo da chave.
+`hasOpenAiKey` já vinha no payload de auth desde a Fase 1 mas nunca tinha sido consumido pelo
+JS — só faltava ligar o fio.
+
+`dotnet build`: 0/0. `dotnet test`: 352/352 verdes (361 pico → -12 chaves de crédito removidas
++3 chave nova `me.settings.openai.nudge` × 3 idiomas = 352). `node scripts/check-ui-js.js`: ok.
+
+---
+
 ## 2026-09-07 — Alucinação na extração corrigida (mantosfc) + slider de qualidade no addin
 
 Dave testou de verdade com fotos reais e a extração estava **inventando arte que não existe na
