@@ -329,10 +329,6 @@
   .select-count{font-size:11px;text-align:center;font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
   .select-count .note{display:block;margin-top:2px;font-weight:400;text-transform:none;opacity:.65;letter-spacing:0;}
 
-  /* ---- barra de progresso (bloco sólido, sem raio) -------------------------------------- */
-  .progress-bar-outer{height:12px;border:var(--lw) solid var(--ink);background:var(--surface);overflow:hidden;}
-  .progress-bar-inner{height:100%;background:var(--red);transition:width .2s;}
-
   /* ---- extraindo / resultado: tabela de dados (referência "DATA TABLE") ----------------- */
   .dtable{border:var(--lw) solid var(--ink);border-collapse:collapse;width:100%;font-size:12px;}
   .dtable thead th{
@@ -496,7 +492,7 @@
     <!-- 4.5: extraindo -->
     <section id="screen-extracting" hidden style="flex:1;display:flex;flex-direction:column;gap:10px;">
       <div class="bar"><span class="tab" aria-hidden="true"></span><span data-i18n="me.extract.title">Extraindo elementos</span></div>
-      <div class="progress-bar-outer"><div class="progress-bar-inner" id="extractBarInner" style="width:0%"></div></div>
+      <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
       <div style="overflow-x:auto;">
         <table class="dtable">
           <thead><tr>
@@ -702,9 +698,6 @@
     screenBeforeSettings: null, // restored by settingsBack — see bug fix note there
     screenBeforeHistory: null,  // same pattern, for historyBack (screen-history)
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
-    extractRealPct: 0,       // last CONFIRMED batch progress (from real extractProgress events)
-    extractCreepPct: 0,      // what extractBarInner actually shows — creeps toward CREEP_CEILING
-    extractProgressTimer: null,
   };
 
   // ---- auth screens ---------------------------------------------------------
@@ -946,49 +939,20 @@
       listEl.appendChild(row);
       state.extractProgress[id] = { label: el ? el.label : id, stage: "queued", ok: null };
     });
-    state.extractRealPct = 0;
-    state.extractCreepPct = 0;
-    $("extractBarInner").style.width = "0%";
-    startProgressCreep();
     showScreen("screen-extracting");
     send({cmd:"extract", ids: ids});
   }
 
-  // Bug fix (Dave, 2026-09-07): "a barra tem que se mexer" — extractBarInner used to only
-  // jump in discrete steps when a real extractProgress event arrived, so it sat dead-still for
-  // however many seconds a single OpenAI call takes (same root cause as the per-row kicker
-  // fix above, different symptom: the OVERALL bar, not a single row).
-  //
-  // Correction (Dave, 2026-09-08): the fix above still froze in practice — the ceiling was
-  // `extractRealPct + slot*0.7`, LOCKED per element until a real extractProgress event bumped
-  // extractRealPct forward. At 0.6%/tick that ~70%-of-a-slot allowance is used up in ~2s, so on
-  // any element whose OpenAI call ran longer than that (routine — a single call is usually
-  // 10-60s), the bar sat dead-still again waiting for the real event ("só se movimenta quando
-  // uma das imagens é finalizada", exactly reproduced). Replaced the per-slot cap with a single
-  // soft ceiling (CREEP_CEILING, well under 100) approached asymptotically: the step shrinks as
-  // it nears the ceiling but never reaches exactly zero, so motion never truly stops before
-  // completion — and, critically, it no longer depends on how many elements have actually
-  // finished (per Dave: "se movimente independente do resultado"). Real events can still pull
-  // the target (and the floor) forward if genuine progress overtakes the creep; only the real
-  // onExtractDone event is ever allowed to reach 100%.
-  var REDUCED_MOTION = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var CREEP_CEILING = 96;
-  var CREEP_RATE = 0.01; // ~12s time-constant to close the gap to the ceiling, any element count
-  function startProgressCreep(){
-    stopProgressCreep();
-    if (REDUCED_MOTION) return; // real jumps only — no simulated motion for this operator
-    state.extractProgressTimer = setInterval(function(){
-      var target = Math.max(CREEP_CEILING, state.extractRealPct);
-      if (state.extractCreepPct < target) {
-        var step = Math.max(0.02, (target - state.extractCreepPct) * CREEP_RATE);
-        state.extractCreepPct = Math.min(target, state.extractCreepPct + step);
-        $("extractBarInner").style.width = state.extractCreepPct + "%";
-      }
-    }, 120);
-  }
-  function stopProgressCreep(){
-    if (state.extractProgressTimer) { clearInterval(state.extractProgressTimer); state.extractProgressTimer = null; }
-  }
+  // Correction (Dave, 2026-09-08 — 3rd attempt): every percent-fill approach tried here
+  // (per-slot ceiling, then an asymptotic global ceiling) still read as "static" in practice,
+  // because a single OpenAI call can sit well past whatever ceiling the creep reached — "sei lá
+  // oq tu fez, e já é a terceira vez, e não corrigiu". Dave's actual ask: make the OVERALL bar
+  // look and behave exactly like screen-detecting's — a sliding block, not a fill percentage.
+  // Dropped the percent-driven bar entirely in favor of the SAME kicker-track/kicker-fill
+  // indeterminate slider already used on screen-loading/screen-detecting (pure CSS @keyframes
+  // kick, self-running, no JS state to keep in sync with real progress) — "dando a ideia de
+  // trabalho/movimento" is exactly what that animation already does, continuously, for free.
+  // The per-row cells (renderStageCell below) still show real per-element state.
 
   // Bug fix (Dave, 2026-09-07): the row used to be plain text ("extraindo...", "upscaling...")
   // with nothing moving between stage updates — RunExtractAsync processes one element at a
@@ -1038,21 +1002,9 @@
     var stateCell = row.querySelector(".stage");
     if (msg.stage === "done") row.className = msg.ok ? "done" : "failed";
     renderStageCell(stateCell, msg.stage, msg.ok);
-
-    var total = msg.total || 1;
-    var doneCount = 0;
-    Object.keys(state.extractProgress).forEach(function(id){ if (state.extractProgress[id].ok !== null) doneCount++; });
-    state.extractRealPct = Math.round((doneCount/total)*100);
-    if (state.extractCreepPct < state.extractRealPct || REDUCED_MOTION) state.extractCreepPct = state.extractRealPct;
-    $("extractBarInner").style.width = state.extractCreepPct + "%";
   }
 
   function onExtractDone(msg){
-    stopProgressCreep();
-    state.extractRealPct = 100;
-    state.extractCreepPct = 100;
-    $("extractBarInner").style.width = "100%";
-
     var listEl = $("resultList");
     listEl.innerHTML = "";
     state.lastFailedIds = [];
