@@ -70,7 +70,6 @@ namespace MantosExtract.Core.I18n
             ["me.select.none"] = "Nenhum elemento detectado nesta imagem.",
             ["me.select.extractButton"] = "Extrair ({0})",
             ["me.select.selectedCount"] = "{0} selecionados",
-            ["me.select.creditNote"] = "1 crédito já usado na detecção. Extrair vai custar mais {0}.",
             ["me.select.backButton"] = "Selecionar outra imagem",
 
             ["me.extract.progress.extracting"] = "extraindo...",

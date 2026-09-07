@@ -6,6 +6,34 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-07 — Reversão de M2: Mantos Extract não debita mais crédito
+
+Decisão de produto do Dave (não técnica minha — ele que pediu a mudança e definiu o motivo).
+Argumento dele: Mantos Extract é BYOK (a confecção traz a própria chave OpenAI) e a confecção
+já paga o plano do mantosfc — debitar "crédito" da plataforma em cima de uma chamada cujo custo
+de IA já sai do bolso do próprio tenant é cobrar duas vezes por algo que não custa nada pra
+plataforma. Não existe nenhum usuário Mantos Extract em produção ainda, então a mudança é segura
+agora (nenhum cliente pagante afetado) — diferente de reabrir a mesma pergunta pro Gemini
+(`/generation/*`, `/extraction/inpaint`), que já tem tenants reais sendo cobrados hoje; isso
+ficou deliberadamente FORA do escopo desta mudança.
+
+**O que muda de fato:** nenhuma chamada a `/api/v1/mantos-extract/detect` ou
+`/api/v1/mantos-extract/extract` consome mais `creditsRemaining`. A tabela `generations` do
+mantosfc continua logando cada chamada (endpoint, IP, timestamp, status) sem nenhuma mudança —
+isso deixa a base de dados pronta pro Dave criar, se quiser no futuro, uma lógica de limite POR
+PLANO (um teto mensal por plano, por exemplo) em vez do modelo atual de crédito
+comprado/consumido. Essa lógica de limite futura NÃO foi implementada agora, só ficou possível.
+
+A remoção do middleware de crédito nesses dois endpoints (rota `/api/v1/mantos-extract/*` saindo
+do grupo `[creditCheck, activeSubscription]`) e o ajuste dos testes funcionais correspondentes
+foi feita no repo `mantosfc`, em paralelo a esta entrada, por outro agente na mesma sessão — ver
+o CHANGELOG/histórico de commits daquele repo pros detalhes de arquivo.
+
+Neste repo (`mantos-extract`), a reversão tocou: `CLAUDE.md` (seção "Créditos" e linha M2 da
+tabela de Locked Decisions), a UI de seleção do addin (removida a menção a custo de crédito na
+tela de detecção/extração) e `plans/Phase_2.md`/`plans/Phase_3.md` (requisitos que citavam
+débito de crédito).
+
 ## 2026-09-04 — Trocar senha em Configurações (voluntário, não forçado)
 
 Dave pediu inicialmente um fluxo de troca OBRIGATÓRIA no primeiro login (conta criada pelo

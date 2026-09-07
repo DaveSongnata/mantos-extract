@@ -2,6 +2,9 @@
 
 - **STATUS:** [x] Implementada (2026-09-03). Build+testes verdes. **NÃO validada** contra
   CorelDRAW real nem OpenAI real (ver CHANGELOG.md e VALIDATION).
+  **Amendment 2026-09-07:** M2 (débito de crédito na extração) foi revogada — ver
+  `CHANGELOG.md` (entrada 2026-09-07) e `CLAUDE.md`. Os requisitos abaixo que mencionam débito
+  de crédito descrevem o comportamento ORIGINAL desta fase, já superado.
 - **OBJETIVO (1 frase):** Operador confirma elementos na tela de seleção, o addin chama
   `POST /api/v1/mantos-extract/extract` (novo) por elemento confirmado, e cada resultado
   (PNG transparente) entra no documento do Corel via `Layer.Import`.
@@ -20,16 +23,21 @@
   pura/testável) — layout em grade simples, esquerda→direita com quebra de linha.
 - **WHEN** um elemento falha (erro da OpenAI, timeout, import), **THEN** o sistema SHALL
   seguir extraindo os demais e marcar só aquele como falho — nunca aborta o lote inteiro.
-- **WHEN** o servidor responde `E_NO_CREDITS` no meio do lote, **THEN** o sistema SHALL parar
+- ~~**WHEN** o servidor responde `E_NO_CREDITS` no meio do lote, **THEN** o sistema SHALL parar
   o lote (não tenta os restantes) e SHALL contar quantos ficaram de fora, sem debitar por
-  eles (o middleware já garante isso — só 2xx debita).
+  eles (o middleware já garante isso — só 2xx debita).~~ Requisito morto desde 2026-09-07: o
+  endpoint não faz mais parte do grupo credit-checked, então nunca mais responde 402
+  `E_NO_CREDITS`. O código JS/C# que trata esse código (`stopBatch`/`skippedNoCredits`, tela
+  4.8) permanece no repo, inofensivo, só nunca mais dispara — ver CHANGELOG.
 - **WHEN** a internet cai/sessão expira no meio do lote, **THEN** o sistema SHALL preservar
   o progresso já feito; se a sessão expirou (`E_UNAUTHORIZED`), SHALL voltar pro login.
 
 ## Backend novo (mantosfc) — implementado
 
-- `mantos_extract_extract_controller.ts` — `POST /api/v1/mantos-extract/extract`, mesmo
-  grupo credit-checked. Recebe a foto ORIGINAL + bbox 0-1000 confirmado + label.
+- `mantos_extract_extract_controller.ts` — `POST /api/v1/mantos-extract/extract`. Até
+  2026-09-07 vivia no mesmo grupo credit-checked (**revogado**, ver `CHANGELOG.md` — não
+  debita mais crédito, log de uso em `generations` continua). Recebe a foto ORIGINAL + bbox
+  0-1000 confirmado + label.
 - `OpenAiVisionService.extractElement()` — **recorta no servidor via `sharp` ANTES** de
   chamar a OpenAI (decisão tomada aqui, não assumida do spec original — ver CHANGELOG),
   padding de 3% porque o box do operador é sugestão. Chama `POST /v1/images/edits`
@@ -78,7 +86,10 @@
   disambiguada com sufixo).
 - **PENDENTE — VM real:** confirmar visualmente que o elemento aparece como objeto novo,
   fundo transparente, sem distorcer proporção, no lugar calculado pelo `ElementLayout`.
-  Confirmar no painel do mantosfc que o crédito foi debitado 1× por elemento com sucesso.
+  ~~Confirmar no painel do mantosfc que o crédito foi debitado 1× por elemento com sucesso.~~
+  Obsoleto desde 2026-09-07 — extração não debita mais crédito (ver CHANGELOG.md). Confirmar
+  em vez disso que a chamada aparece logada em `/admin/generations` (endpoint
+  `mantos_extract_extract`, sem efeito em `creditsRemaining`).
 - **PENDENTE — comportamento real do `Layer.Import`:** a suposição de que o import deixa o
   resultado como seleção ativa é do spec original, não verificada em nenhum código real dos
   irmãos. Se a VM mostrar outro comportamento, só `CorelImporter.ResolveImportedShape`

@@ -4,6 +4,9 @@
   `tsc`/`eslint` limpos; mantos-extract: 276/276 testes). **NÃO validada** contra CorelDRAW
   real nem contra a OpenAI real — nenhum dos dois disponível neste ambiente (ver CHANGELOG.md
   e VALIDATION abaixo).
+  **Amendment 2026-09-07:** M2 (débito de crédito na detecção) foi revogada — ver
+  `CHANGELOG.md` (entrada 2026-09-07) e `CLAUDE.md`. Os requisitos abaixo que mencionam débito
+  de crédito descrevem o comportamento ORIGINAL desta fase, já superado.
 - **OBJETIVO (1 frase):** Operador seleciona um bitmap no Corel, clica "detectar", o addin
   chama `POST /api/v1/mantos-extract/detect` (novo, no mantosfc) que roda OpenAI
   server-side, e a tela de seleção (mockup 4.4) mostra as caixas + checklist reais.
@@ -17,16 +20,21 @@
 - **WHEN** o operador clica "Detectar", **THEN** o sistema SHALL exportar a imagem
   selecionada (`CorelExporter.ExportSelectionToPng`, `Type.InvokeMember`+`Finish()`) e enviar
   pro endpoint novo com `Authorization: Bearer <sessão>` + `X-OpenAI-Api-Key` do tenant.
-- **WHEN** o endpoint responde 2xx, **THEN** o sistema SHALL debitar 1 crédito (automático via
-  `credit_check_middleware.ts` reusado, mesmo grupo de rota) e SHALL desenhar as caixas
-  retornadas sobre a imagem + checklist.
-- **WHEN** o endpoint responde 402 `E_NO_CREDITS`, **THEN** o sistema SHALL mostrar a tela
-  de créditos esgotados (mockup 4.8) — `handleActionError` no JS.
+- **WHEN** o endpoint responde 2xx, **THEN** o sistema SHALL desenhar as caixas retornadas
+  sobre a imagem + checklist. (Até 2026-09-07 este passo também debitava 1 crédito via
+  `credit_check_middleware.ts` — revogado, ver `CHANGELOG.md`.)
+- ~~**WHEN** o endpoint responde 402 `E_NO_CREDITS`, **THEN** o sistema SHALL mostrar a tela
+  de créditos esgotados (mockup 4.8) — `handleActionError` no JS.~~ Requisito morto desde
+  2026-09-07: o endpoint não faz mais parte do grupo credit-checked, então nunca mais responde
+  402 `E_NO_CREDITS`. O código JS/C# que trata esse código permanece no repo (inofensivo, só
+  nunca mais dispara) — ver nota no CHANGELOG.
 - **WHEN** falha de rede, **THEN** o sistema SHALL mostrar a tela de erro (4.7) com detalhe
   técnico colapsado.
 
 Não implementado (fora do escopo desta fase, ver LESSONS): heurística de "imagem de baixa
-qualidade" antes de gastar crédito — adiado pra Fase 5, ver nota lá.
+qualidade" antes de gastar a chamada à OpenAI (o argumento de custo mudou — não é mais custo de
+crédito da plataforma, é custo da chamada que sai da própria chave BYOK do tenant, mas o motivo
+de avisar antes continua o mesmo) — adiado pra Fase 5, ver nota lá.
 
 ## Backend novo (mantosfc) — implementado
 
@@ -37,9 +45,11 @@ qualidade" antes de gastar crédito — adiado pra Fase 5, ver nota lá.
   `response_format:{type:'json_schema',...,strict:true}` — confirmado GA/atual via busca na
   doc oficial da OpenAI antes de codar (não assumido). Schema fixa
   `{elements:[{id,label,bbox:{x_min,y_min,x_max,y_max}}]}`, coordenadas 0-1000.
-- `mantos_extract_detect_controller.ts` — `POST /api/v1/mantos-extract/detect`, no MESMO
-  grupo `routes.ts` `[creditCheck, activeSubscription]` — decisão do Dave (CHANGELOG),
-  detecção debita crédito igual qualquer outra geração.
+- `mantos_extract_detect_controller.ts` — `POST /api/v1/mantos-extract/detect`. Até
+  2026-09-07 vivia no MESMO grupo `routes.ts` `[creditCheck, activeSubscription]` do resto das
+  gerações (decisão original do Dave). **Revogado em 2026-09-07** — saiu do grupo
+  credit-checked, não debita mais crédito (ver `CHANGELOG.md`); o log de uso na tabela
+  `generations` continua.
 - Log na tabela `generations` existente (`endpoint: 'mantos_extract_detect'`), sem tabela
   nova — `GenerationEndpoint` (generation.ts) estendido com os dois valores novos.
 - **Deliberadamente sem SDK `openai` no npm** — `fetch`/`FormData` nativos do Node 24 (ver

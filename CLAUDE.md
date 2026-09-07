@@ -57,15 +57,28 @@ com o `message` que o servidor manda no corpo, então a frase amigável do backe
 ("Seu plano não inclui acesso ao Mantos Extract...") já chega pronta pro operador, do mesmo
 jeito que `E_NO_CREDITS`/`E_MISSING_OPENAI_KEY` já chegavam.
 
-## Créditos (decisão do Dave 2026-09-03)
+## Créditos (decisão original do Dave 2026-09-03, **REVERTIDA em 2026-09-07** — ver M2)
 
-**Detecção TAMBÉM debita 1 crédito**, não só a extração confirmada — leitura literal do
-endpoint de geração já existente no mantosfc (`credit_check_middleware.ts` debita 1 em
-qualquer 2xx do grupo `/api/v1` com `[creditCheck, activeSubscription]`, e os dois endpoints
-novos entram nesse MESMO grupo). Consequência de UI: o custo real de um lote com N elementos
-confirmados é **1 (detectar) + N (extrair)**, não N. A tela de seleção (4.4 do spec) precisa
-mostrar isso explicitamente ("1 crédito já usado na detecção + N para extrair"), não só
-"N selecionados, N créditos" como o mockup original sugeria — ver `CHANGELOG.md`.
+**Estado ATUAL: nem detecção nem extração debitam crédito.** Mantos Extract é BYOK (a
+confecção traz a própria chave OpenAI) e já paga o plano do mantosfc — debitar "crédito" da
+plataforma em cima de uma chamada cujo custo de IA quem paga é o tenant seria cobrar duas
+vezes por algo que não custa nada pra plataforma. Decisão do Dave, tomada com o produto ainda
+sem nenhum usuário real em produção (mudança segura, sem cliente pagante afetado). O uso
+continua sendo logado normalmente na tabela `generations` do mantosfc (endpoint,
+IP, timestamp) — só o efeito de CONSUMIR `creditsRemaining` que foi removido, deixando a porta
+aberta pro Dave criar, no futuro, uma lógica de limite POR PLANO (não "crédito
+comprado/consumido") se ele quiser. Ver `CHANGELOG.md` (entrada 2026-09-07).
+
+<details>
+<summary>Histórico — decisão original 2026-09-03 (revertida, mantido só de referência)</summary>
+
+Chegou a valer, entre 2026-09-03 e 2026-09-07: "Detecção TAMBÉM debita 1 crédito, não só a
+extração confirmada — leitura literal do endpoint de geração já existente no mantosfc
+(`credit_check_middleware.ts` debita 1 em qualquer 2xx do grupo `/api/v1` com `[creditCheck,
+activeSubscription]`, e os dois endpoints novos entravam nesse MESMO grupo). Consequência de UI
+que chegou a ser cogitada: a tela de seleção (4.4 do spec) mostrando "1 crédito já usado na
+detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento atual.
+</details>
 
 ## IA — dois provedores, nunca confundir
 
@@ -180,7 +193,7 @@ o `EngineRunner.cs`, não a Ponte de Ação.
 | ID | Regra |
 |----|-------|
 | M1 | Detecção NÃO é corte final — é sugestão visual; usuário confirma cada elemento antes de extrair (spec §2) |
-| M2 | Detecção debita 1 crédito (Dave, 2026-09-03) — mesma leitura literal do grupo de middleware existente |
+| M2 | ~~Detecção debita 1 crédito (Dave, 2026-09-03)~~ → **Revogada 2026-09-07: Mantos Extract não debita crédito (nem detecção, nem extração)** — BYOK + plano já pago tornava a cobrança dupla sem sentido; uso continua logado em `generations` pra eventual limite por plano futuro |
 | M3 | Chave OpenAI é BYOK por tenant, igual Gemini hoje (Dave, 2026-09-03) — nunca chave única da plataforma |
 | M4 | Sessão de operador (Bearer/mantosfc) e chave OpenAI (BYOK) são independentes de `LicenseClient.cs`/HWID+Ed25519 do SisCut — nunca reusar aquele fluxo pra login |
 | M5 | Upscale é processo externo (Real-ESRGAN NCNN-Vulkan via IPC por arquivo, padrão `EngineRunner.cs`), nunca lib embutida no shim nem dependência de Python |
