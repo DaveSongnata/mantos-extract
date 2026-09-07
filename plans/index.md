@@ -114,7 +114,7 @@ ponta a ponta dentro do Corel de verdade" já na Fase 1.
 | [Fase 2](Phase_2.md) | Seleção de bitmap no Corel → `/mantos-extract/detect` real (OpenAI) → overlay de caixas + checklist | **Implementada** — backend+addin, `tsc`/`eslint` limpos; pendente validação na VM + chamada OpenAI real |
 | [Fase 3](Phase_3.md) | Confirmação → `/mantos-extract/extract` real → `Layer.Import` no canvas, crédito debitado | **Implementada** — pendente validação na VM + chamada OpenAI real |
 | [Fase 4](Phase_4.md) | Upscale 2× via `realesrgan-ncnn-vulkan.exe` entra no pipeline extração→import | **Código implementado e testado** — binário real NÃO bundlado (passo manual, ver Phase_4.md "O QUE FALTA") |
-| [Fase 5](Phase_5.md) | Estados de erro, créditos esgotados, retomada de lote, i18n completo, instalador | **Maior parte implementada** — instalador single-EXE segue placeholder (falta ícone aprovado), WhatsApp da tela 4.8 sem número real (não inventado, ver Phase_5.md) |
+| [Fase 5](Phase_5.md) | Estados de erro, créditos esgotados, retomada de lote, i18n completo, instalador | **Implementada por completo** (2026-09-04) — instalador single-EXE real + ícone de marca aprovado e conectado; WhatsApp da tela 4.8 sem número real (não inventado, ver Phase_5.md); pendente validação na VM |
 
 **Resumo do que "produto completo" significa aqui:** todo o código de produto (backend nos
 dois endpoints novos, addin com as 4 fases de fluxo, i18n completo, scripts de build/deploy)
