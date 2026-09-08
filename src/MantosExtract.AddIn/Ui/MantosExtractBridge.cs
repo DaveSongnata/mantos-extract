@@ -36,6 +36,18 @@ namespace MantosExtract.AddIn.Ui
         private readonly Action? _reloadForLanguage;
         private bool _running;
 
+        // Cancelamento (Dave, 2026-09-08 — "precisamos das duas opcoes", cancelar tudo E cancelar
+        // um elemento especifico): antes disso, RunAndRelease sempre passava CancellationToken.None
+        // pro trabalho em andamento — nao existia NENHUM jeito de cancelar nada. _runningCts e o
+        // token do comando atual como um todo ("cancelar tudo" cancela ele); _elementCancelSources
+        // e um token POR ELEMENTO, linkado ao de cima, criado só quando a extração daquele
+        // elemento começa de verdade — cancelar só ele nao afeta os outros do lote.
+        // _skipElementIds cobre o caso de cancelar um elemento que ainda está "NA FILA" (nunca
+        // chegou a ter um token próprio ainda).
+        private CancellationTokenSource? _runningCts;
+        private readonly Dictionary<string, CancellationTokenSource> _elementCancelSources = new();
+        private readonly HashSet<string> _skipElementIds = new();
+
         private readonly ICredentialStore _credentials = new SecureCredentialStore();
         private readonly IMantosfcAuthClient _authClient = new MantosfcAuthClient();
         private readonly AuthOrchestrator _auth;
@@ -96,6 +108,7 @@ namespace MantosExtract.AddIn.Ui
                 string[] confirmedIds = Array.Empty<string>();
                 string folderPath = "";
                 string extractionQuality = "";
+                string elementId = "";
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -109,11 +122,16 @@ namespace MantosExtract.AddIn.Ui
                     confirmedIds = StrArray(root, "ids");
                     folderPath = Str(root, "path");
                     extractionQuality = Str(root, "quality");
+                    elementId = Str(root, "id");
                 }
 
-                bool isStatusQuery = cmd == "status";
+                // status/cancel/cancelElement furam o busy-guard de propósito: cancelar só faz
+                // sentido justamente ENQUANTO algo está rodando, então se ele fosse tratado como
+                // qualquer outro comando "novo", cairia no DROPPED (busy) abaixo e nunca chegaria
+                // no switch (Dave, 2026-09-08).
+                bool bypassesBusyGuard = cmd == "status" || cmd == "cancel" || cmd == "cancelElement";
 
-                if (_running && !isStatusQuery)
+                if (_running && !bypassesBusyGuard)
                 {
                     MantosExtractLog.Write("OnWebMessage: DROPPED (busy) cmd=" + cmd);
                     Post(new { type = "busy", cmd });
@@ -141,6 +159,8 @@ namespace MantosExtract.AddIn.Ui
 
                     case "detect": RunAsync(ct => RunDetectAsync(ct)); break;
                     case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, ct)); break;
+                    case "cancel": _runningCts?.Cancel(); break;
+                    case "cancelElement": CancelElement(elementId); break;
 
                     default: MantosExtractLog.Write("OnWebMessage: comando desconhecido '" + cmd + "'"); break;
                 }
@@ -154,18 +174,36 @@ namespace MantosExtract.AddIn.Ui
         private void RunAsync(Func<CancellationToken, Task> work)
         {
             _running = true;
-            _ = RunAndRelease(work);
+            _runningCts = new CancellationTokenSource();
+            _ = RunAndRelease(work, _runningCts);
         }
 
-        private async Task RunAndRelease(Func<CancellationToken, Task> work)
+        private async Task RunAndRelease(Func<CancellationToken, Task> work, CancellationTokenSource cts)
         {
-            try { await work(CancellationToken.None).ConfigureAwait(false); }
+            try { await work(cts.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                // Cancelamento deliberado do operador ("cancelar tudo") — nunca um erro de auth,
+                // então nunca posta {type:"auth", screen:"login"} (isso deslogaria a pessoa por
+                // ter clicado em cancelar). RunDetectAsync/RunExtractAsync já tratam o próprio
+                // OperationCanceledException internamente pra postar algo específico pra tela
+                // certa; se escapou até aqui é porque não havia nada rodando ainda pra postar,
+                // então não há UI nenhuma esperando uma resposta.
+                MantosExtractLog.Write("RunAsync cancelado pelo operador");
+            }
             catch (Exception ex)
             {
                 MantosExtractLog.Write("RunAsync FAILED: " + ex);
                 Post(new { type = "auth", screen = "login", error = L("me.common.error.unknown") });
             }
-            finally { _running = false; }
+            finally
+            {
+                _running = false;
+                _elementCancelSources.Clear();
+                _skipElementIds.Clear();
+                cts.Dispose();
+                if (ReferenceEquals(_runningCts, cts)) _runningCts = null;
+            }
         }
 
         // ---- auth (Fase 1) -------------------------------------------------------------------
@@ -307,6 +345,14 @@ namespace MantosExtract.AddIn.Ui
                 Post(new { type = "detect", ok = false, code = ex.Code, error = ex.Message });
                 return;
             }
+            catch (OperationCanceledException)
+            {
+                // "Cancelar" na tela de detectando (Dave, 2026-09-08) — nunca deve parecer um
+                // erro de auth nem de rede pro operador, é uma ação dele mesmo.
+                MantosExtractLog.Write("DetectAsync cancelado pelo operador");
+                Post(new { type = "detect", ok = false, code = "E_CANCELLED", error = L("me.detect.error.cancelled") });
+                return;
+            }
 
             _lastDetectedElements = result.Elements;
 
@@ -380,7 +426,19 @@ namespace MantosExtract.AddIn.Ui
 
             for (int i = 0; i < confirmed.Count; i++)
             {
+                // "Cancelar tudo" (Dave, 2026-09-08): não começa mais nenhum elemento novo — os
+                // que já rodaram ficam no manifest normalmente, os restantes simplesmente nunca
+                // são tentados (continuam "NA FILA" na tela, o operador entende pelo resultado
+                // final que o lote foi interrompido de propósito).
+                if (ct.IsCancellationRequested) break;
+
                 DetectedElement element = confirmed[i];
+
+                // "Cancelar este" enquanto ainda estava NA FILA (CancelElement já postou o
+                // extractProgress "cancelado" na hora do clique, antes do loop sequer chegar
+                // nele) — só pula, sem re-postar nada.
+                if (_skipElementIds.Remove(element.Id)) continue;
+
                 Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "extracting" });
 
                 // Computed BEFORE the network call now (used to run after upscale, only for the
@@ -392,12 +450,18 @@ namespace MantosExtract.AddIn.Ui
                     : safeBase;
                 usedNames[safeBase] = count + 1;
 
+                // Token PRÓPRIO deste elemento, linkado ao do lote — "cancelar este" cancela só
+                // ele (CancelElement acha esta entrada no dicionário); "cancelar tudo" cancela o
+                // token do lote, que cascateia pra este via CreateLinkedTokenSource.
+                using var elementCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                _elementCancelSources[element.Id] = elementCts;
+
                 try
                 {
                     ExtractedImage extracted = await _extractionClient
                         .ExtractAsync(session.SessionId, openAiKey!, extractionQuality,
                                        _lastExportedImageBytes, _lastExportedMimeType,
-                                       element.Box, element.Label, ct)
+                                       element.Box, element.Label, elementCts.Token)
                         .ConfigureAwait(false);
 
                     string rawPath = Path.Combine(batchDir, safeName + ".tmp.png");
@@ -444,6 +508,19 @@ namespace MantosExtract.AddIn.Ui
                     { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
                 }
+                catch (OperationCanceledException)
+                {
+                    // Cancelamento (Dave, 2026-09-08) — tanto "cancelar este" (token do próprio
+                    // elemento) quanto "cancelar tudo" (token do lote, linkado) caem aqui iguais;
+                    // não precisa distinguir os dois porque, do ponto de vista DESTE elemento, o
+                    // resultado é o mesmo (não foi extraído). Se foi "cancelar tudo", o `break` no
+                    // topo do próximo loop encerra o resto do lote sozinho.
+                    MantosExtractLog.Write("Extract cancelado pelo operador for " + element.Id);
+                    failed++;
+                    manifestElements.Add(new ExtractionBatchManifestElement
+                    { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
+                    Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = "E_CANCELLED", error = L("me.extract.progress.cancelledError") });
+                }
                 catch (Exception ex)
                 {
                     // COM/import failures land here — an element that extracted fine but could
@@ -454,6 +531,10 @@ namespace MantosExtract.AddIn.Ui
                     manifestElements.Add(new ExtractionBatchManifestElement
                     { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = "E_IMPORT_FAILED", error = L("me.common.error.unknown") });
+                }
+                finally
+                {
+                    _elementCancelSources.Remove(element.Id);
                 }
             }
 
@@ -470,6 +551,24 @@ namespace MantosExtract.AddIn.Ui
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
             Post(new { type = "extract", done = true, succeeded, failed });
+        }
+
+        /// <summary>"Cancelar este" (Dave, 2026-09-08). Duas situações: o elemento já está em
+        /// voo (tem token próprio em _elementCancelSources — cancela ele, RunExtractAsync's catch
+        /// cuida do resto) ou ainda está "NA FILA" (nenhum token ainda — marca pra ser pulado e
+        /// já posta o resultado na hora, já que o loop só chegaria nele bem mais tarde).</summary>
+        private void CancelElement(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+
+            if (_elementCancelSources.TryGetValue(id, out CancellationTokenSource? cts))
+            {
+                cts.Cancel();
+                return;
+            }
+
+            _skipElementIds.Add(id);
+            Post(new { type = "extractProgress", id, stage = "done", ok = false, code = "E_CANCELLED", error = L("me.extract.progress.cancelledError") });
         }
 
         private static void TryDelete(string path)

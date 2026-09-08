@@ -64,6 +64,7 @@ namespace MantosExtract.Core.I18n
             ["me.common.loading"] = "Cargando...",
             ["me.common.error.unknown"] = "Algo salió mal. Intente de nuevo.",
             ["me.common.details"] = "ver detalles técnicos",
+            ["me.common.cancelButton"] = "Cancelar",
             ["me.table.element"] = "Elemento",
             ["me.table.status"] = "Estado",
 
@@ -76,6 +77,7 @@ namespace MantosExtract.Core.I18n
             ["me.detect.error.exportFailed"] = "No pude exportar la imagen seleccionada desde CorelDRAW.",
             ["me.detect.progress.exporting"] = "Exportando imagen...",
             ["me.detect.progress.detecting"] = "Detectando elementos...",
+            ["me.detect.error.cancelled"] = "Detección cancelada.",
 
             ["me.select.title"] = "Elementos detectados",
             ["me.select.none"] = "No se detectó ningún elemento en esta imagen.",
@@ -88,6 +90,10 @@ namespace MantosExtract.Core.I18n
             ["me.extract.progress.queued"] = "en espera",
             ["me.extract.progress.done"] = "listo",
             ["me.extract.progress.failed"] = "falló",
+            ["me.extract.progress.cancelled"] = "cancelado",
+            ["me.extract.progress.cancelledError"] = "Cancelado por el operador.",
+            ["me.extract.cancelAllButton"] = "Cancelar todo",
+            ["me.extract.rowCancelTitle"] = "Cancelar este elemento",
             ["me.extract.title"] = "Extrayendo elementos",
             ["me.extract.result.title"] = "Elementos extraídos",
             ["me.extract.result.summary"] = "{0} de {1} elementos extraídos con éxito",

@@ -123,10 +123,15 @@ o `EngineRunner.cs`, não a Ponte de Ação.
   não só deste addin:
   - **Grid rígido, raio de borda ZERO em qualquer elemento.** Bordas sempre pretas e duras
     (`--lw: 2px`), nunca cinza-suave/hairline.
-  - **Paleta restrita:** `--paper` (papel off-white), `--ink` (quase-preto), `--red`
-    (vermelho-bandeira, única cor de ação/acento), `--gray`/`--gray-light`. Nada de teal,
-    âmbar ou verde — diferenciação semântica (erro/aviso/sucesso) é por FORMA/ícone, não por
-    matiz nova (o sistema já é vermelho+preto+branco+cinza, ponto).
+  - **Paleta restrita:** `--paper` (papel off-white), `--ink` (quase-preto), `--accent`
+    (laranja da marca, `#fcb400` — trocou de vermelho pra laranja em 2026-09-08, cor medida
+    por pixel real da logo aprovada, `docs/Logo Completa.png`/`Extract.png`/`Escrito.png`),
+    `--accent-dark` (`#b36b00`, variante escura pra texto/borda fina sobre fundo claro —
+    `--accent` puro é claro demais pra passar em contraste como texto), `--gray`/`--gray-light`.
+    `--accent-blue` (`#0078fc`, do "ai"/braço geométrico da marca) existe só pro MARK da logo em
+    si (tela de login) — nunca virou uma segunda cor de ação na UI funcional. Continua UMA cor
+    de ação só (só trocou de qual): diferenciação semântica (erro/aviso/sucesso) é por
+    FORMA/ícone, não por matiz nova.
   - **Tipografia:** `Arial Black`/`Arial` — grotesca neutra, a fonte DO Estilo Suíço
     (Helvetica-lineage), não um atalho genérico. Caixa-alta em headers/labels/botões.
   - **Faixa preta = cabeçalho de seção** (`.bar`), com uma "aba" vermelha de 8px antes do
