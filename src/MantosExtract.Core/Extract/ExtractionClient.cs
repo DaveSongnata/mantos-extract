@@ -32,7 +32,16 @@ namespace MantosExtract.Core.Extract
             try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
             _ownsHttp = handler == null;
             _http = handler != null ? new HttpClient(handler, disposeHandler: false) : new HttpClient();
-            _http.Timeout = TimeSpan.FromSeconds(90); // image-edit round trip is the slowest call in the pipeline
+            // 90s estourou em execução real (Dave, 2026-09-08): el_3 deu TaskCanceledException em
+            // SendAsync — exatamente o sintoma de HttpClient.Timeout vencendo, confirmado lendo o
+            // stack trace (bate com PostExtractionAsync, não com um cancelamento manual). O
+            // servidor não impõe timeout nenhum na própria chamada à OpenAI (fetch nativo, sem
+            // AbortSignal) nem há proxy reverso com timeout mais curto neste repo — o gargalo real
+            // era só este valor. Dave pediu explicitamente pelo menos 10 minutos de folga pra
+            // véspera de produção, preferindo eliminar esse modo de falha por completo a só reduzir
+            // a chance dele acontecer (o operador ainda tem "tentar de novo" pros elementos que
+            // falharem de verdade, então um teto bem mais alto não deixa nada preso pra sempre).
+            _http.Timeout = TimeSpan.FromMinutes(10);
         }
 
         public async Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey, string quality,
