@@ -37,7 +37,7 @@ button{font-family:var(--font-body)}
 .titlebar{flex:0 0 36px;height:36px;display:flex;align-items:center;justify-content:space-between;
   background:var(--surface);border-bottom:var(--lw) solid var(--ink)}
 .tb-drag{display:flex;align-items:center;gap:8px;flex:1;height:100%;padding:0 14px}
-.tb-mark{width:14px;height:14px;flex:0 0 14px;background:var(--accent)}
+.tb-mark{width:14px;height:14px;flex:0 0 14px;background-size:contain;background-repeat:no-repeat;background-position:center}
 .tb-title{font-family:var(--font);font-size:10.5px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:var(--ink)}
 .tb-btns{display:flex;height:100%}
 .tb-btn{width:44px;height:36px;display:flex;align-items:center;justify-content:center;border:0;border-left:1px solid var(--gray-light);background:transparent;
@@ -50,8 +50,7 @@ button{font-family:var(--font-body)}
 /* sidebar */
 .sidebar{width:240px;flex:0 0 240px;display:flex;flex-direction:column;background:var(--ink);color:#fff;border-right:var(--lw) solid var(--ink)}
 .sb-brand{padding:26px 22px 20px;border-bottom:1px solid rgba(255,255,255,.14)}
-.sb-mark{width:34px;height:34px;background:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:12px}
-.sb-mark span{font-family:var(--font);font-weight:900;font-size:16px;color:var(--ink)}
+.sb-mark{width:34px;height:34px;background-size:contain;background-repeat:no-repeat;background-position:center;margin-bottom:12px}
 .sb-name{font-family:var(--font);font-weight:900;font-size:17px;letter-spacing:-.01em;line-height:1.1;text-transform:uppercase}
 .sb-ver{margin-top:4px;font-size:10px;color:rgba(255,255,255,.45);letter-spacing:.04em}
 .sb-steps{flex:1;padding:18px 0;display:flex;flex-direction:column}
@@ -142,7 +141,7 @@ kbd{font-family:monospace;font-size:11px;background:var(--gray-light);border:1px
 
 <div class="titlebar">
   <div class="tb-drag" id="tb-drag">
-    <span class="tb-mark"></span>
+    <span class="tb-mark" id="tbMark"></span>
     <span class="tb-title">Mantos Extract — Instalador</span>
   </div>
   <div class="tb-btns">
@@ -154,7 +153,7 @@ kbd{font-family:monospace;font-size:11px;background:var(--gray-light);border:1px
 <div class="shell">
 <aside class="sidebar">
   <div class="sb-brand">
-    <div class="sb-mark"><span>M</span></div>
+    <div class="sb-mark" id="sbMark"></div>
     <div class="sb-name">Mantos Extract</div>
     <div class="sb-ver">INSTALADOR &middot; v0.1</div>
   </div>
@@ -174,6 +173,12 @@ kbd{font-family:monospace;font-size:11px;background:var(--gray-light);border:1px
 </div>
 
 <script>
+// Mark real da marca (Dave, 2026-09-08 - 'atualmente eh so um M escrito') - mesmo PNG 48px
+// usado no icone do Corel/instalador (src/MantosExtract.Resources/icons/mantosextract-48.png),
+// aplicado via background-image pra nao duplicar o base64 em dois lugares do HTML.
+var BRAND_MARK_B64 = "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";
+document.getElementById('sbMark').style.backgroundImage = 'url(data:image/png;base64,' + BRAND_MARK_B64 + ')';
+document.getElementById('tbMark').style.backgroundImage = 'url(data:image/png;base64,' + BRAND_MARK_B64 + ')';
 var step = 0, installing = false, finishOk = false, finishErr = '';
 var progressPct = 0;
 var STEPS = ['Bem-vindo', 'Instalando', 'Concluído'];

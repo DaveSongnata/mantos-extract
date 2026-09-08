@@ -91,15 +91,22 @@
     label.textContent = "PREVIEW — pular pra tela:";
     label.style.cssText = "color:#fff;font-size:9px;font-weight:900;width:100%;margin-bottom:2px;text-transform:uppercase;";
     panel.appendChild(label);
+    function jumpTo(id) {
+      SCREENS.forEach(function (s) { var el = document.getElementById(s); if (el) el.hidden = (s !== id); });
+    }
     SCREENS.forEach(function (id) {
       var b = document.createElement("button");
       b.textContent = id.replace("screen-", "");
       b.style.cssText = "font-size:9px;padding:3px 5px;background:#fff;border:1px solid #000;cursor:pointer;";
-      b.addEventListener("click", function () {
-        SCREENS.forEach(function (s) { var el = document.getElementById(s); if (el) el.hidden = (s !== id); });
-      });
+      b.addEventListener("click", function () { jumpTo(id); });
       panel.appendChild(b);
     });
     document.body.appendChild(panel);
+
+    // ?screen=home na URL pula direto pra tela, sem precisar clicar — usado por scripts de
+    // screenshot automatizado (headless), nunca por um humano abrindo o preview normalmente.
+    var qs = new URLSearchParams(location.search);
+    var wanted = qs.get("screen");
+    if (wanted) setTimeout(function () { jumpTo("screen-" + wanted); }, 1200);
   });
 })();
