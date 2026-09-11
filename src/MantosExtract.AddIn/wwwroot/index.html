@@ -739,8 +739,34 @@
   // ID sentinela do item "Fundo" (Dave, 2026-09-11) — tem que bater exatamente com
   // BackgroundElementId em MantosExtractBridge.cs.
   var BACKGROUND_ID = "__background__";
+
+  // Correction (Dave, 2026-09-11 — achado por auditoria de navegação pedida pelo Dave, "às
+  // vezes fico sem saída"): screenBeforeSettings/screenBeforeHistory (dois campos separados,
+  // cada um capturado só na hora de ABRIR aquela tela) se sobrescreviam um ao outro assim que o
+  // operador alternava Configurações↔Histórico duas vezes — a tela real de origem (select,
+  // result, etc) se perdia pra sempre, e settingsBack/historyBack ficavam voltando só um pro
+  // outro, num loop sem saída real (só "Sair" escapava). Substituído por UMA variável só,
+  // atualizada dentro do próprio showScreen sempre que a tela-alvo NÃO for settings/history/
+  // login/loading — essas nunca "contam" como origem, então não importa quantas vezes o
+  // operador entre e saia delas, a última tela de verdade nunca é sobrescrita.
+  var NON_ANCHOR_SCREENS = ["screen-loading","screen-login","screen-settings","screen-history"];
   function showScreen(id){
     SCREENS.forEach(function(s){ $(s).hidden = (s !== id); });
+    if (NON_ANCHOR_SCREENS.indexOf(id) < 0) state.lastRealScreen = id;
+  }
+
+  // Achado secundário da mesma auditoria: historyBtn/settingsBtn nunca ficam escondidos durante
+  // detecção/extração, então dá pra abrir Configurações/Histórico no meio de um lote — se o
+  // resultado chegar enquanto o operador está lá, um showScreen(...) direto puxaria ele pra fora
+  // sem aviso nenhum. goToScreen adia a navegação nesse caso (só atualiza lastRealScreen, que
+  // settingsBack/historyBack já usam) — o operador só é levado pro resultado quando ele mesmo
+  // decidir voltar, nunca sem avisar.
+  function goToScreen(id){
+    if ($("screen-settings").hidden === false || $("screen-history").hidden === false) {
+      state.lastRealScreen = id;
+      return;
+    }
+    showScreen(id);
   }
 
   // Vocabulário de marcação Swiss: só preto/vermelho, diferenciados por PADRÃO de traço +
@@ -760,8 +786,7 @@
     confirmedIds: [],         // ids the operator checked on screen-select
     extractProgress: {},      // id -> {label, stage, ok}
     lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
-    screenBeforeSettings: null, // restored by settingsBack — see bug fix note there
-    screenBeforeHistory: null,  // same pattern, for historyBack (screen-history)
+    lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
   };
 
@@ -900,11 +925,11 @@
     if (!msg.ok) {
       // Cancelamento (Dave, 2026-09-08) não é um erro — volta pra home sem o banner vermelho
       // que os outros códigos de falha mostram.
-      if (msg.code === "E_CANCELLED") { showScreen("screen-home"); return; }
+      if (msg.code === "E_CANCELLED") { goToScreen("screen-home"); return; }
       handleActionError(msg, function(){
         $("homeErrorText").textContent = msg.error || T("me.common.error.unknown");
         show("homeError");
-        showScreen("screen-home");
+        goToScreen("screen-home");
       });
       return;
     }
@@ -983,7 +1008,7 @@
     listEl.appendChild(bgRow);
 
     updateSelectFooter();
-    showScreen("screen-select");
+    goToScreen("screen-select");
   }
 
   function highlightBox(id, on){
@@ -1136,7 +1161,7 @@
       (msg.succeeded||0) + (msg.failed||0));
 
     $("resultRetryFailedBtn").hidden = state.lastFailedIds.length === 0;
-    showScreen("screen-result");
+    goToScreen("screen-result");
   }
 
   $("resultRetryFailedBtn").addEventListener("click", function(){ beginExtraction(state.lastFailedIds.slice()); });
@@ -1153,7 +1178,7 @@
     if (msg.code === "E_NETWORK") {
       $("errorBody").textContent = msg.error || T("me.error.network.body");
       $("errorTechDetails").textContent = msg.code + ": " + (msg.error || "");
-      showScreen("screen-error");
+      goToScreen("screen-error");
       return;
     }
     fallback();
@@ -1182,10 +1207,8 @@
   function openSettings(opts){
     // Bug fix (Dave, 2026-09-07): settingsBack used to hardcode showScreen("screen-home"),
     // throwing the operator out of screen-extracting/screen-select/screen-result whenever they
-    // opened Settings mid-flow — the C# side keeps running regardless (RunExtractAsync doesn't
-    // care which screen is visible), so nothing was actually lost, but visually it looked like
-    // the batch had been abandoned. Remember whatever screen was actually showing.
-    state.screenBeforeSettings = SCREENS.filter(function(s){ return !$(s).hidden; })[0] || "screen-home";
+    // opened Settings mid-flow. state.lastRealScreen (tracked by showScreen itself, ver nota
+    // acima de NON_ANCHOR_SCREENS) já está certo aqui — nada pra capturar manualmente.
     $("qualitySlider").value = QUALITY_LEVELS.indexOf(state.extractionQuality);
     updateQualityTicks();
     $("openaiKey").value = "";
@@ -1224,19 +1247,18 @@
   });
 
   $("settingsBack").addEventListener("click", function(){
-    showScreen(state.screenBeforeSettings || "screen-home");
+    showScreen(state.lastRealScreen || "screen-home");
     send({cmd:"status"});
   });
 
   // ---- history navigation (Dave, 2026-09-07) — same "remember where I came from" pattern
   // as Settings above, so opening History mid-flow never abandons the operator's screen.
   $("historyBtn").addEventListener("click", function(){
-    state.screenBeforeHistory = SCREENS.filter(function(s){ return !$(s).hidden; })[0] || "screen-home";
     showScreen("screen-history");
     send({cmd:"history"});
   });
   $("historyBack").addEventListener("click", function(){
-    showScreen(state.screenBeforeHistory || "screen-home");
+    showScreen(state.lastRealScreen || "screen-home");
     send({cmd:"status"});
   });
 

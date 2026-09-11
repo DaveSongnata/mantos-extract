@@ -126,6 +126,21 @@
           }
         }, 150);
       }, 1200);
+    } else if (wanted === "navtest") {
+      // Reproduz o bug de navegação achado em auditoria (Dave, 2026-09-11): detecta, marca 1
+      // elemento, abre Configurações, abre Histórico, abre Configurações DE NOVO, clica em
+      // Voltar — antes do fix isso ficava preso alternando Config/Histórico pra sempre; depois
+      // do fix, "Voltar" deve cair em screen-select. Só existe pra verificação automatizada
+      // (screenshot), nunca usado por um humano no preview normal.
+      setTimeout(function () {
+        window.mantosExtractReceive({ type: "detect", ok: true, imageUrl: SAMPLE_IMAGE, elements: SAMPLE_ELEMENTS });
+        setTimeout(function () {
+          document.getElementById("settingsBtn").click();
+          document.getElementById("historyBtn").click();
+          document.getElementById("settingsBtn").click();
+          document.getElementById("settingsBack").click();
+        }, 150);
+      }, 1200);
     } else if (wanted) {
       setTimeout(function () { jumpTo("screen-" + wanted); }, 1200);
     }
