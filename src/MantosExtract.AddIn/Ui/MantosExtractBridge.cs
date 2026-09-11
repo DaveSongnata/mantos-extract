@@ -386,6 +386,15 @@ namespace MantosExtract.AddIn.Ui
 
         // ---- extract + upscale + import (Fases 3-4) -------------------------------------------
 
+        // "Fundo" (Dave, 2026-09-11): não é um DetectedElement de verdade (sem bbox, a IA nunca
+        // "detectou" ele — o operador só marca um checkbox especial na tela de seleção). Um ID
+        // sentinela deixa ele viajar pela MESMA lista `confirmedIds`/pela MESMA tabela de
+        // progresso da UI sem precisar inventar um segundo canal de mensagens JS↔C# — mas o
+        // processamento em si (ExtractOneBackgroundAsync) é um método totalmente separado do
+        // loop de elementos abaixo, exatamente como o Dave pediu ("e": endpoint/fluxo dedicado,
+        // "b": não afeta o que já funciona pros elementos).
+        private const string BackgroundElementId = "__background__";
+
         private async Task RunExtractAsync(string[] confirmedIds, CancellationToken ct)
         {
             SessionState? session = _credentials.LoadSession();
@@ -404,7 +413,15 @@ namespace MantosExtract.AddIn.Ui
                 return;
             }
 
-            List<DetectedElement> confirmed = ResolveConfirmedElements(confirmedIds);
+            bool wantsBackground = Array.IndexOf(confirmedIds, BackgroundElementId) >= 0;
+            string[] elementIds = wantsBackground
+                ? Array.FindAll(confirmedIds, id => id != BackgroundElementId)
+                : confirmedIds;
+
+            // Daqui pra baixo, ATÉ o fechamento do loop `for`, é exatamente o código de elementos
+            // que já existia — `confirmed`/`confirmedIds` nunca inclui o ID sentinela, então esse
+            // fluxo roda IDÊNTICO a antes quando "Fundo" não está marcado.
+            List<DetectedElement> confirmed = ResolveConfirmedElements(elementIds);
             string extractionQuality = ExtractionQualityStore.Read();
             var placedThisBatch = new List<PlacedSlot>();
             var usedNames = new Dictionary<string, int>();
@@ -417,8 +434,9 @@ namespace MantosExtract.AddIn.Ui
             // manifest written at the end carries the definitive outcome.
             Guid batchId = Guid.NewGuid();
             DateTime batchStart = DateTime.Now;
+            int totalForNaming = confirmed.Count + (wantsBackground ? 1 : 0);
             string batchDir = Path.Combine(ExtractionsRootDir(),
-                ExtractionBatchNaming.FolderName(batchId, batchStart, confirmed.Count));
+                ExtractionBatchNaming.FolderName(batchId, batchStart, totalForNaming));
             Directory.CreateDirectory(batchDir);
             var manifestElements = new List<ExtractionBatchManifestElement>();
 
@@ -538,11 +556,26 @@ namespace MantosExtract.AddIn.Ui
                 }
             }
 
+            // "Fundo" (Dave, 2026-09-11) — roda DEPOIS do loop de elementos, nunca em paralelo
+            // com ele: elementos já são sequenciais de propósito (rate-limit da OpenAI, progresso
+            // legível na UI), e Corel/COM não é seguro pra chamar de duas tarefas ao mesmo tempo
+            // (_corel.ImportPng/MoveLastImportedShape mexem no documento ativo). "Dois fluxos" aqui
+            // significa dois CAMINHOS DE CÓDIGO separados (ExtractOneBackgroundAsync nunca toca
+            // no loop acima), não duas threads simultâneas.
+            if (wantsBackground && !ct.IsCancellationRequested)
+            {
+                await ExtractOneBackgroundAsync(
+                    session, openAiKey!, extractionQuality, batchDir, pageBounds, placedThisBatch,
+                    manifestElements, ct,
+                    onSucceeded: () => succeeded++, onFailed: () => failed++
+                ).ConfigureAwait(false);
+            }
+
             var manifest = new ExtractionBatchManifest
             {
                 BatchId = batchId,
                 CreatedAtUtc = batchStart.ToUniversalTime(),
-                Total = confirmed.Count,
+                Total = totalForNaming,
                 Succeeded = succeeded,
                 Failed = failed,
                 Elements = manifestElements,
@@ -551,6 +584,101 @@ namespace MantosExtract.AddIn.Ui
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
             Post(new { type = "extract", done = true, succeeded, failed });
+        }
+
+        /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela
+        /// (BackgroundElementId) fora do loop de elementos, com seu próprio HTTP call
+        /// (ExtractBackgroundAsync, sem bbox — a foto ORIGINAL inteira, nunca um crop) mas
+        /// reaproveitando o mesmo pipeline de upscale/import/nome/manifest que os elementos já
+        /// usam, pra o resultado final (arquivo na pasta do lote, forma importada no Corel,
+        /// linha "PRONTO"/"FALHOU" na tabela) ser indistinguível de um elemento pro operador.
+        /// onSucceeded/onFailed incrementam os contadores succeeded/failed de RunExtractAsync
+        /// (closures, não campos — evita threading esses dois ints por mais parâmetros).</summary>
+        private async Task ExtractOneBackgroundAsync(
+            SessionState session, string openAiKey, string extractionQuality, string batchDir,
+            (double LeftMm, double BottomMm, double WidthMm, double HeightMm) pageBounds,
+            List<PlacedSlot> placedThisBatch, List<ExtractionBatchManifestElement> manifestElements,
+            CancellationToken ct, Action onSucceeded, Action onFailed)
+        {
+            // "Cancelar este" enquanto ainda "NA FILA" (antes até de chegar aqui) — mesma
+            // convenção do loop de elementos: CancelElement já postou o "cancelado" na hora do
+            // clique, só precisamos pular sem re-postar nada.
+            if (_skipElementIds.Remove(BackgroundElementId)) return;
+
+            Post(new { type = "extractProgress", id = BackgroundElementId, stage = "extracting" });
+
+            using var bgCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _elementCancelSources[BackgroundElementId] = bgCts;
+
+            string safeName = NameSanitizer.Sanitize(L("me.select.backgroundLabel"));
+            try
+            {
+                ExtractedImage extracted = await _extractionClient
+                    .ExtractBackgroundAsync(session.SessionId, openAiKey, extractionQuality,
+                                   _lastExportedImageBytes!, _lastExportedMimeType, bgCts.Token)
+                    .ConfigureAwait(false);
+
+                string rawPath = Path.Combine(batchDir, safeName + ".tmp.png");
+                File.WriteAllBytes(rawPath, extracted.Bytes);
+
+                Post(new { type = "extractProgress", id = BackgroundElementId, stage = "upscaling" });
+                string upscaledPath = ApplyUpscale(rawPath, BackgroundElementId);
+
+                string finalPath = Path.Combine(batchDir, safeName + ".png");
+                if (string.Equals(upscaledPath, rawPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Move(rawPath, finalPath);
+                }
+                else
+                {
+                    File.Copy(upscaledPath, finalPath, overwrite: true);
+                    TryDelete(rawPath);
+                    TryDelete(upscaledPath);
+                }
+
+                var (leftMm, bottomMm, widthMm, heightMm) = _corel.ImportPng(finalPath);
+                var (slotLeft, slotBottom) = ElementLayout.NextSlot(
+                    pageBounds.WidthMm, pageBounds.HeightMm, widthMm, heightMm, placedThisBatch);
+                _corel.MoveLastImportedShape(slotLeft, slotBottom);
+                _corel.RenameLastImportedShape(safeName);
+                placedThisBatch.Add(new PlacedSlot(widthMm, heightMm));
+
+                onSucceeded();
+                manifestElements.Add(new ExtractionBatchManifestElement
+                { Id = BackgroundElementId, Label = L("me.select.backgroundLabel"), FileName = Path.GetFileName(finalPath), Ok = true });
+                Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = true });
+            }
+            catch (MantosExtractApiException ex)
+            {
+                MantosExtractLog.Write("ExtractBackground FAILED (" + ex.Code + "): " + ex.Message);
+
+                if (ex.Code == "E_UNAUTHORIZED") { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
+
+                onFailed();
+                manifestElements.Add(new ExtractionBatchManifestElement
+                { Id = BackgroundElementId, Label = L("me.select.backgroundLabel"), FileName = null, Ok = false });
+                Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = false, code = ex.Code, error = ex.Message });
+            }
+            catch (OperationCanceledException)
+            {
+                MantosExtractLog.Write("ExtractBackground cancelado pelo operador");
+                onFailed();
+                manifestElements.Add(new ExtractionBatchManifestElement
+                { Id = BackgroundElementId, Label = L("me.select.backgroundLabel"), FileName = null, Ok = false });
+                Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = false, code = "E_CANCELLED", error = L("me.extract.progress.cancelledError") });
+            }
+            catch (Exception ex)
+            {
+                MantosExtractLog.Write("ExtractBackground import FAILED: " + ex);
+                onFailed();
+                manifestElements.Add(new ExtractionBatchManifestElement
+                { Id = BackgroundElementId, Label = L("me.select.backgroundLabel"), FileName = null, Ok = false });
+                Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = false, code = "E_IMPORT_FAILED", error = L("me.common.error.unknown") });
+            }
+            finally
+            {
+                _elementCancelSources.Remove(BackgroundElementId);
+            }
         }
 
         /// <summary>"Cancelar este" (Dave, 2026-09-08). Duas situações: o elemento já está em

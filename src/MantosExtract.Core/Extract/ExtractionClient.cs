@@ -52,6 +52,59 @@ namespace MantosExtract.Core.Extract
             return await DownloadAsync(url, ct).ConfigureAwait(false);
         }
 
+        /// <summary>"Fundo" (Dave, 2026-09-11) — endpoint e corpo de request DIFERENTES de
+        /// ExtractAsync de propósito (sem bbox/label, a foto inteira vai pro servidor), mas
+        /// reusa DownloadAsync/BuildError (mesmo contrato de resposta {url, meta}).</summary>
+        public async Task<ExtractedImage> ExtractBackgroundAsync(string sessionId, string openAiApiKey, string quality,
+            byte[] imageBytes, string mimeType, CancellationToken ct)
+        {
+            string url = await PostExtractionBackgroundAsync(sessionId, openAiApiKey, quality, imageBytes, mimeType, ct)
+                .ConfigureAwait(false);
+            return await DownloadAsync(url, ct).ConfigureAwait(false);
+        }
+
+        private async Task<string> PostExtractionBackgroundAsync(string sessionId, string openAiApiKey, string quality,
+            byte[] imageBytes, string mimeType, CancellationToken ct)
+        {
+            using var form = new MultipartFormDataContent();
+            var imageContent = new ByteArrayContent(imageBytes);
+            imageContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
+            form.Add(imageContent, "image", "foto.png");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_baseUri, "/api/v1/mantos-extract/extract-background"))
+            {
+                Content = form,
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", sessionId);
+            request.Headers.Add("X-OpenAI-Api-Key", openAiApiKey);
+            request.Headers.Add("X-OpenAI-Quality", string.IsNullOrWhiteSpace(quality) ? "medium" : quality);
+
+            HttpResponseMessage response;
+            try { response = await _http.SendAsync(request, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                throw new MantosExtractApiException("E_NETWORK",
+                    "Sem conexão com o servidor. Verifique sua internet e tente novamente.", ex);
+            }
+
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode) throw BuildError(response.StatusCode, body);
+
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("url", out JsonElement u) && u.ValueKind == JsonValueKind.String)
+                {
+                    string? url = u.GetString();
+                    if (!string.IsNullOrWhiteSpace(url)) return url!;
+                }
+            }
+            catch { /* falls through to the malformed-response throw below */ }
+
+            throw new MantosExtractApiException("E_MALFORMED_RESPONSE",
+                "O servidor respondeu de um jeito inesperado. Tente novamente em instantes.");
+        }
+
         private async Task<string> PostExtractionAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct)
         {

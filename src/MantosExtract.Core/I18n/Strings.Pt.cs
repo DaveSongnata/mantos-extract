@@ -84,6 +84,7 @@ namespace MantosExtract.Core.I18n
             ["me.select.extractButton"] = "Extrair ({0})",
             ["me.select.selectedCount"] = "{0} selecionados",
             ["me.select.backButton"] = "Selecionar outra imagem",
+            ["me.select.backgroundLabel"] = "Fundo",
 
             ["me.extract.progress.extracting"] = "extraindo...",
             ["me.extract.progress.upscaling"] = "melhorando resolução...",

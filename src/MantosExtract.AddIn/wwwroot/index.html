@@ -353,6 +353,9 @@
     font-family:var(--font);font-size:10.5px;font-weight:900;color:var(--surface);
   }
   .check-row .label{flex:1;font-size:12.5px;font-weight:700;}
+  /* "Fundo" (Dave, 2026-09-11) — não é um elemento detectado, então não ganha o número
+     colorido; a faixa de cima em --accent marca visualmente que é um item à parte da lista. */
+  .check-row-special{border-top:3px solid var(--accent);}
   .select-footer{display:flex;flex-direction:column;gap:8px;}
   .select-count{font-size:11px;text-align:center;font-weight:700;text-transform:uppercase;letter-spacing:.02em;}
   .select-count .note{display:block;margin-top:2px;font-weight:400;text-transform:none;opacity:.65;letter-spacing:0;}
@@ -732,6 +735,10 @@
   var SCREENS = ["screen-loading","screen-login","screen-home","screen-detecting","screen-select",
                  "screen-extracting","screen-result","screen-error","screen-settings",
                  "screen-history"];
+
+  // ID sentinela do item "Fundo" (Dave, 2026-09-11) — tem que bater exatamente com
+  // BackgroundElementId em MantosExtractBridge.cs.
+  var BACKGROUND_ID = "__background__";
   function showScreen(id){
     SCREENS.forEach(function(s){ $(s).hidden = (s !== id); });
   }
@@ -957,6 +964,24 @@
       listEl.appendChild(row);
     });
 
+    // "Fundo" (Dave, 2026-09-11): não é um elemento detectado pela IA — não tem bbox, não
+    // aparece sobre a foto, não entra no loop acima. Item especial fixo no fim da lista, com
+    // ID sentinela (BACKGROUND_ID) que o C# reconhece e processa num fluxo totalmente separado
+    // (ExtractOneBackgroundAsync) do loop de elementos. Reusa o MESMO checkbox/onChecklistChange
+    // dos elementos — só a aparência (sem número de tag, com separador) marca que é diferente.
+    var bgRow = document.createElement("label");
+    bgRow.className = "check-row check-row-special";
+    var bgCb = document.createElement("input");
+    bgCb.type = "checkbox";
+    bgCb.className = "swiss-check";
+    bgCb.dataset.id = BACKGROUND_ID;
+    bgCb.addEventListener("change", onChecklistChange);
+    var bgLbl = document.createElement("span");
+    bgLbl.className = "label";
+    bgLbl.textContent = T("me.select.backgroundLabel");
+    bgRow.appendChild(bgCb); bgRow.appendChild(bgLbl);
+    listEl.appendChild(bgRow);
+
     updateSelectFooter();
     showScreen("screen-select");
   }
@@ -993,16 +1018,17 @@
     listEl.innerHTML = "";
     ids.forEach(function(id){
       var el = findDetected(id);
+      var label = id === BACKGROUND_ID ? T("me.select.backgroundLabel") : (el ? el.label : id);
       var row = document.createElement("tr");
       row.id = "progress-" + id;
       var nameCell = document.createElement("td");
-      nameCell.textContent = el ? el.label : id;
+      nameCell.textContent = label;
       var stateCell = document.createElement("td");
       stateCell.className = "stage";
       renderStageCell(stateCell, "queued", null, id);
       row.appendChild(nameCell); row.appendChild(stateCell);
       listEl.appendChild(row);
-      state.extractProgress[id] = { label: el ? el.label : id, stage: "queued", ok: null };
+      state.extractProgress[id] = { label: label, stage: "queued", ok: null };
     });
     showScreen("screen-extracting");
     startElapsed("extractingElapsed");

@@ -105,8 +105,29 @@
 
     // ?screen=home na URL pula direto pra tela, sem precisar clicar — usado por scripts de
     // screenshot automatizado (headless), nunca por um humano abrindo o preview normalmente.
+    // screen=select/extracting também populam dados de exemplo (via o MESMO caminho real de
+    // window.mantosExtractReceive que um detect/extract de verdade usaria), pra a tela não
+    // renderizar vazia — inclui o item especial "Fundo" marcado, pra dar pra conferir ele
+    // também num screenshot automatizado.
     var qs = new URLSearchParams(location.search);
     var wanted = qs.get("screen");
-    if (wanted) setTimeout(function () { jumpTo("screen-" + wanted); }, 1200);
+    if (wanted === "select" || wanted === "extracting") {
+      // index.html inteiro roda dentro de uma IIFE — beginExtraction/renderSelectScreen NÃO são
+      // globais, então simula como um humano de verdade: dispara o detect real, marca as
+      // checkboxes (inclusive "Fundo") via evento de DOM, clica em Extrair de verdade.
+      setTimeout(function () {
+        window.mantosExtractReceive({ type: "detect", ok: true, imageUrl: SAMPLE_IMAGE, elements: SAMPLE_ELEMENTS });
+        setTimeout(function () {
+          var boxes = document.querySelectorAll("#selectChecklist input.swiss-check");
+          boxes.forEach(function (cb) { cb.checked = true; cb.dispatchEvent(new Event("change")); });
+          if (wanted === "extracting") {
+            var btn = document.getElementById("extractBtn");
+            if (btn) btn.click();
+          }
+        }, 150);
+      }, 1200);
+    } else if (wanted) {
+      setTimeout(function () { jumpTo("screen-" + wanted); }, 1200);
+    }
   });
 })();
