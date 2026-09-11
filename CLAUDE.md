@@ -95,8 +95,19 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
 
 Real-ESRGAN NCNN-Vulkan (binário standalone, sem Python), invocado como **processo externo**
 pelo shim, no MESMO padrão do `SisCut.Engine/EngineRunner.cs` (grava arquivo de entrada →
-`Process.Start` com timeout duro → mapeia exit code → lê arquivo de saída). Cai pra CPU
-sozinho se não houver GPU dedicada (mais lento, nunca trava). Fator fixo 2×.
+`Process.Start` com timeout duro → mapeia exit code → lê arquivo de saída). Fator fixo 2×.
+
+**Correção 2026-09-11 (testado de verdade, não documentação copiada):** este binário
+**NÃO tem fallback real pra CPU** — `-g -1` devolve `invalid gpu device` (exit 255) nesta
+build (v0.2.5.0); ele exige um device Vulkan de verdade (integrada OU dedicada). Isso não
+quebra nada porque `UpscaleRunner.Run`/`ApplyUpscale` já tratam QUALQUER exit não-zero do
+binário (GPU ausente incluso) como degradação — devolve a imagem original sem upscale,
+nunca bloqueia nem trava. Só numa máquina sem NENHUM device Vulkan (raro, mas possível em
+VM sem GPU passthrough) o upscale ficaria sempre desligado, silenciosamente. Tempos reais
+medidos (imagem 1254×1254 → 2508×2508, nesta VM de dev): automático (escolhe sozinho)
+19,7s — escolheu a NVIDIA dedicada; forçando só a Intel Iris Xe (integrada) 83,6s; forçando
+só a NVIDIA RTX 3050 (dedicada) 18,0s. Numa máquina só com integrada, esperar algo na faixa
+de ~80s+ por elemento.
 
 **Nota de arquitetura (decisão técnica, ver CHANGELOG):** o spec original citava a
 `PONTE-DE-ACAO.md` do SisCut como precedente — mas aquele protocolo é para um app PAR externo
