@@ -24,17 +24,22 @@ namespace MantosExtract.Core.Tests.Upscale
         [Fact]
         public void BuildArguments_ProducesExpectedCliShape()
         {
-            string args = UpscaleRunner.BuildArguments(@"C:\temp\in.png", @"C:\temp\out.png");
+            string args = UpscaleRunner.BuildArguments(
+                @"C:\temp\in.png", @"C:\temp\out.png", @"C:\temp\models", "realesrgan-x4plus");
 
-            Assert.Equal("-i C:\\temp\\in.png -o C:\\temp\\out.png -s 2", args);
+            Assert.Equal("-i C:\\temp\\in.png -o C:\\temp\\out.png -s 2 -m C:\\temp\\models -n realesrgan-x4plus", args);
         }
 
         [Fact]
         public void BuildArguments_QuotesPathsWithSpaces()
         {
-            string args = UpscaleRunner.BuildArguments(@"C:\Program Files\in.png", @"C:\Program Files\out.png");
+            string args = UpscaleRunner.BuildArguments(
+                @"C:\Program Files\in.png", @"C:\Program Files\out.png", @"C:\Program Files\models", "realesrgan-x4plus");
 
-            Assert.Equal("-i \"C:\\Program Files\\in.png\" -o \"C:\\Program Files\\out.png\" -s 2", args);
+            Assert.Equal(
+                "-i \"C:\\Program Files\\in.png\" -o \"C:\\Program Files\\out.png\" -s 2 " +
+                "-m \"C:\\Program Files\\models\" -n realesrgan-x4plus",
+                args);
         }
 
         [Fact]

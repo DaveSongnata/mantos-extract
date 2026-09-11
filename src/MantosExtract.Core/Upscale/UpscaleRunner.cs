@@ -62,18 +62,20 @@ namespace MantosExtract.Core.Upscale
                 Path.GetFileNameWithoutExtension(inputPngPath) + "_2x.png");
             if (File.Exists(outputPath)) File.Delete(outputPath);
 
-            string arguments = BuildArguments(inputPngPath, outputPath);
+            string arguments = BuildArguments(inputPngPath, outputPath, _paths.ModelsDir, UpscalePaths.ModelName);
             UpscaleStatus status = RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds);
             return status == UpscaleStatus.Success ? UpscaleResult.Ok(outputPath) : UpscaleResult.Of(status);
         }
 
         /// <summary>Pure — the exact CLI shape realesrgan-ncnn-vulkan.exe expects (-i in, -o
-        /// out, -s scale). Kept separate from process invocation so it is unit-testable without
-        /// spawning anything (plans/Phase_4.md §"A VALIDAR EMPIRICAMENTE": the model/.param
-        /// choice is still open, but the flag shape itself is the upstream project's documented
-        /// CLI and safe to fix now).</summary>
-        public static string BuildArguments(string inputPath, string outputPath) =>
-            $"-i {Quote(inputPath)} -o {Quote(outputPath)} -s 2";
+        /// out, -s scale, -m models dir, -n model name). Kept separate from process invocation so
+        /// it is unit-testable without spawning anything. <c>-m</c>/<c>-n</c> are NOT optional in
+        /// practice: without them the binary silently falls back to its own default model
+        /// (<c>realesr-animevideov3</c>, tuned for anime video), which is the wrong model for
+        /// garment artwork — confirmed 2026-09-11 with a real invocation against a real extracted
+        /// background (1254x1254 → 2508x2508 with <c>realesrgan-x4plus</c>).</summary>
+        public static string BuildArguments(string inputPath, string outputPath, string modelsDir, string modelName) =>
+            $"-i {Quote(inputPath)} -o {Quote(outputPath)} -s 2 -m {Quote(modelsDir)} -n {Quote(modelName)}";
 
         /// <summary>
         /// Generic external-process runner: start, wait up to <paramref name="timeoutSeconds"/>,

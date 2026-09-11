@@ -11,6 +11,14 @@ obj/
 # grande, fica em armazenamento normal, não no histórico do git (mesmo padrão do Optimus).
 shared/bin/
 
+# Binário de terceiro redistribuível (Real-ESRGAN NCNN-Vulkan, M5/plans/Phase_4.md) — não é
+# fonte deste repo, ~40MB com o modelo. Um humano baixa e coloca aqui (ver
+# assets/upscale/README.md pra instruções exatas/URL/versão) — build-all.ps1 empacota
+# automaticamente se estiver presente, degrada pra BinaryMissing (sem quebrar nada) se não.
+assets/upscale/*.exe
+assets/upscale/*.dll
+assets/upscale/models/
+
 # Chaves privadas / segredos — nunca versionar
 *.pfx
 *.p12

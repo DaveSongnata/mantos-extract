@@ -13,12 +13,22 @@ namespace MantosExtract.Core.Upscale
     {
         public const string InstalledExeName = "realesrgan-ncnn-vulkan.exe";
 
+        /// <summary>Nome do modelo geral (não-anime) a usar — o binário, sem <c>-n</c> explícito,
+        /// cai no default upstream <c>realesr-animevideov3</c> (otimizado pra vídeo de anime), que
+        /// é errado pra estampa/logo de roupa (Dave, 2026-09-11 — resolução de saída ruim no fundo
+        /// extraído fez achar que o upscale nem rodava; na real o binário nunca esteve presente em
+        /// nenhum build, e mesmo presente o modelo default seria o errado).</summary>
+        public const string ModelName = "realesrgan-x4plus";
+
         public string ExecutablePath { get; }
+        public string ModelsDir { get; }
         public string TempDir { get; }
 
         public UpscalePaths(string executablePath, string? tempDir = null)
         {
             ExecutablePath = executablePath ?? throw new ArgumentNullException(nameof(executablePath));
+            string? exeDir = Path.GetDirectoryName(ExecutablePath);
+            ModelsDir = string.IsNullOrEmpty(exeDir) ? "models" : Path.Combine(exeDir, "models");
             TempDir = tempDir ?? Path.Combine(Path.GetTempPath(), "MantosExtract", "upscale");
         }
 
