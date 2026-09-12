@@ -154,6 +154,29 @@ disparar o SisCut (request.json/response.json com claim-por-delete), direção o
 este projeto precisa (o próprio shim possui e invoca seu processo filho). O precedente real é
 o `EngineRunner.cs`, não a Ponte de Ação.
 
+## Licenças de terceiros (produto é vendido FECHADO — conferido 2026-09-12)
+
+Tudo que o instalador distribui é **permissivo**: Real-ESRGAN (modelos) BSD-3-Clause ·
+`realesrgan-ncnn-vulkan.exe` MIT · ncnn (dentro do exe) BSD-3 + zlib + BSD-2 · Mesa/lavapipe
+MIT (+ Boost 1.0 em partes) · LLVM Apache-2.0 WITH LLVM-exception · WebView2 e bibliotecas
+.NET da Microsoft. **Nada de GPL/LGPL/AGPL** — nenhuma obrigação de abrir o código do produto.
+
+O que essas licenças exigem em troca é só uma coisa: reproduzir os avisos de copyright e o
+texto delas junto da distribuição. É o que o `THIRD-PARTY-NOTICES.txt` faz (o
+`InstallerEngine` grava ele na máquina do cliente). Esse arquivo é MATERIAL DO CLIENTE:
+mantém só o mínimo legal, sem descrever pra que cada componente serve, sem citar arquivos ou
+decisões deste repo — descrição de arquitetura no notice entrega de graça como o produto é
+feito. Ao adicionar uma dependência nova que vá NO INSTALADOR, acrescentar o aviso dela ali.
+
+Dois pontos de atenção:
+- **`vcomp140.dll`** (runtime OpenMP da Microsoft, exigido pelo .exe do upscale) é o único
+  item que não é open-source: vale sob os termos de "Distributable Code" do Visual Studio. A
+  forma canônica seria depender do VC++ Redistributable instalado em vez de copiar a DLL
+  solta — ponto pra conferência jurídica antes de escalar a venda.
+- **`vcomp140d.dll`** (variante DEBUG, vem no ZIP oficial do Real-ESRGAN) NUNCA deve ser
+  empacotada: DLL de debug da Microsoft não é redistribuível, e a tabela de imports do .exe
+  mostra que ela não é usada (só `VCOMP140.DLL`). Removida em 2026-09-12.
+
 ## UI Rules
 
 - WebView2 + HTML, 100% offline. Nunca CDN, nunca webfont externa.

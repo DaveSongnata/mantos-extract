@@ -1,26 +1,12 @@
 Mantos Extract — Third-Party Notices
 ====================================
 
-Este produto distribui e/ou depende do software de terceiros listado abaixo.
+Este produto inclui software de terceiros sob as licenças reproduzidas abaixo.
 
-TODAS as licenças envolvidas são PERMISSIVAS (MIT, BSD-2, BSD-3, zlib, Boost, Apache-2.0
-com LLVM exception). NENHUM componente é GPL, LGPL ou AGPL — nada aqui exige abrir o código
-do Mantos Extract nem impõe copyleft ao produto. Verificado componente por componente em
-2026-09-12 (as licenças BSD/MIT exigem, em redistribuição binária, reproduzir o aviso de
-copyright e o disclaimer "na documentação e/ou outros materiais fornecidos com a
-distribuição" — este arquivo é esse material, e ele é instalado junto com o produto:
-installer/Core/InstallerEngine.cs grava-o no destino).
-
-================================================================================
-1. Real-ESRGAN — modelos pré-treinados (.bin/.param)
-================================================================================
-Usado para: upscale local 2x dos elementos extraídos (M5/M8).
-Arquivos: upscale/models/realesrgan-x4plus-anime.{bin,param}
-          upscale/models/realesr-animevideov3-x2.{bin,param}
-Projeto: https://github.com/xinntao/Real-ESRGAN
-Licença: BSD-3-Clause (o repositório não estabelece termos separados para os pesos, nem
-         restrição de uso comercial para estes modelos).
-
+--------------------------------------------------------------------------------
+Real-ESRGAN
+https://github.com/xinntao/Real-ESRGAN
+--------------------------------------------------------------------------------
 BSD 3-Clause License
 
 Copyright (c) 2021, Xintao Wang
@@ -48,15 +34,10 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-================================================================================
-2. Real-ESRGAN-ncnn-vulkan — executável (realesrgan-ncnn-vulkan.exe)
-================================================================================
-Usado para: o processo externo que faz o upscale (invocado por UpscaleRunner).
-Arquivo: upscale/realesrgan-ncnn-vulkan.exe
-Projeto: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan
-Licença: MIT (dois avisos de copyright no LICENSE do projeto).
-Nota: este executável é derivado de realsr-ncnn-vulkan (nihui) e embute o ncnn (item 3).
-
+--------------------------------------------------------------------------------
+Real-ESRGAN-ncnn-vulkan
+https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan
+--------------------------------------------------------------------------------
 MIT License
 
 Copyright (c) 2021 Xintao Wang
@@ -78,69 +59,52 @@ FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TOR
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-================================================================================
-3. ncnn (Tencent) — embutido estaticamente no executável do item 2
-================================================================================
-Projeto: https://github.com/Tencent/ncnn
-Licença: BSD-3-Clause (Copyright (c) 2017 THL A29 Limited, a Tencent company, and
-         contributors). Componentes de terceiros dentro do ncnn usam zlib License
-         (rotinas matemáticas SIMD — Julien Pommier, Giovanni Garberoglio) e BSD-2-Clause
-         (SqueezeNet/Caffe — Forrest N. Iandola, The Regents of the University of
-         California). Todas permissivas; o texto BSD-3 é o do item 1, com o copyright da
-         Tencent.
+--------------------------------------------------------------------------------
+ncnn
+https://github.com/Tencent/ncnn
+--------------------------------------------------------------------------------
+BSD 3-Clause License
 
-================================================================================
-4. Mesa 3D — lavapipe / llvmpipe (Vulkan por software): vulkan_lvp.dll
-================================================================================
-Usado para: permitir o upscale em máquinas SEM placa de vídeo compatível com Vulkan
-            (modo CPU — ver CLAUDE.md §Upscale). Invocado como driver do processo do item 2
-            via VK_DRIVER_FILES; não é carregado pelo nosso código.
-Arquivos: upscale/cpu-vulkan/vulkan_lvp.dll, upscale/cpu-vulkan/lvp_icd.x86_64.json
-Projeto: https://gitlab.freedesktop.org/mesa/mesa  (build Windows: pal1000/mesa-dist-win)
-Licença: MIT para o código do Mesa; partes do llvmpipe também sob Boost Software License
-         1.0. Contém avisos de copyright de vários colaboradores (Red Hat, Intel, AMD,
-         Valve, VMware e outros) — todos permissivos. Confirmado por mantenedor do Mesa
-         (mesa-dev, thread "Lavapipe license"): "You should only see the MIT license for
-         all Mesa contributions that don't import external source code."
-         O LLVM que o llvmpipe utiliza é Apache-2.0 WITH LLVM-exception — a exceção existe
-         justamente para permitir redistribuir o código objeto embarcado sem as obrigações
-         que o texto da Apache-2.0 imporia.
+Copyright (c) 2017 THL A29 Limited, a Tencent company, and contributors.
+All rights reserved.
 
-================================================================================
-5. Microsoft C/C++ OpenMP Runtime — vcomp140.dll / vcomp140d.dll
-================================================================================
-Usado para: dependência de runtime do executável do item 2 (vem no release oficial dele —
-            confirmado na tabela de imports do .exe: ele importa VCOMP140.DLL).
-Arquivo: upscale/vcomp140.dll
-Licença: componente do Microsoft Visual C++ Redistributable, coberto pelos termos de
-         "Distributable Code" da licença do Visual Studio.
+(Termos idênticos aos reproduzidos acima para a BSD 3-Clause License.)
 
-Nota 1 — a vcomp140d.dll (variante de DEBUG, que vinha no ZIP oficial do Real-ESRGAN) foi
-REMOVIDA do pacote em 2026-09-12: as DLLs de debug da Microsoft não são redistribuíveis, e a
-tabela de imports do executável mostra que ela nunca era usada (verificado: só VCOMP140.DLL
-aparece; o upscale roda normalmente sem ela).
+Componentes de terceiros incluídos no ncnn são licenciados sob a zlib License
+(Copyright (c) Julien Pommier; Copyright (c) Giovanni Garberoglio) e sob a BSD 2-Clause
+License (Copyright (c) Forrest N. Iandola; Copyright (c) The Regents of the University of
+California). Os avisos dessas licenças não podem ser removidos.
 
-Nota 2 — para a vcomp140.dll (release), a forma canônica de entregar o runtime é instalar o
-Visual C++ Redistributable em vez de copiar a DLL solta. Mantida como vem do release oficial
-upstream; é o único item desta lista cujo enquadramento depende dos termos do Visual Studio
-e não de uma licença open-source — vale uma conferência jurídica antes da venda, embora o
-risco prático seja baixo (é um runtime redistribuível da própria Microsoft).
+--------------------------------------------------------------------------------
+Mesa 3D
+https://gitlab.freedesktop.org/mesa/mesa
+--------------------------------------------------------------------------------
+MIT License
 
-================================================================================
-6. Microsoft.Web.WebView2 (NuGet)
-================================================================================
-Usado para: a UI do addin e do instalador.
-Licença: termos da Microsoft para o WebView2 SDK (redistribuição permitida com o produto).
-https://www.nuget.org/packages/Microsoft.Web.WebView2
+Copyright (c) The Mesa 3D Graphics Library contributors (incluindo, entre outros,
+Red Hat, Inc., Intel Corporation, Advanced Micro Devices, Inc., Valve Corporation e
+VMware, Inc.).
 
-================================================================================
-7. System.Text.Json / System.Memory / System.Buffers e demais pacotes .NET (NuGet)
-================================================================================
-Licença: MIT (Microsoft / .NET Foundation).
+(Termos idênticos aos reproduzidos acima para a MIT License.)
 
-================================================================================
-Ferramentas de build (NÃO distribuídas com o produto)
-================================================================================
-ILRepack.Lib.MSBuild.Task (Apache-2.0) e
-Microsoft.NETFramework.ReferenceAssemblies (MIT) são usados apenas na compilação; não
-acompanham o instalador.
+Partes deste componente são licenciadas sob a Boost Software License 1.0
+(https://www.boost.org/LICENSE_1_0.txt).
+
+--------------------------------------------------------------------------------
+LLVM
+https://llvm.org
+--------------------------------------------------------------------------------
+Apache License 2.0 with LLVM Exceptions
+Copyright (c) The LLVM Project contributors.
+
+Texto integral: https://llvm.org/LICENSE.txt
+Exceção: https://spdx.org/licenses/LLVM-exception.html
+
+--------------------------------------------------------------------------------
+Microsoft Visual C++ Runtime / Microsoft Edge WebView2 / bibliotecas .NET
+--------------------------------------------------------------------------------
+Copyright (c) Microsoft Corporation.
+
+Componentes redistribuíveis da Microsoft, usados sob os termos de licença aplicáveis da
+Microsoft. As bibliotecas .NET da Microsoft e da .NET Foundation são licenciadas sob a
+MIT License, cujos termos estão reproduzidos acima.

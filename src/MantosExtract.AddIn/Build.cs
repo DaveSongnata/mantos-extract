@@ -6,6 +6,6 @@
     /// </summary>
     internal static class Build
     {
-        public const string Tag = "0.7.1";
+        public const string Tag = "0.7.2";
     }
 }
