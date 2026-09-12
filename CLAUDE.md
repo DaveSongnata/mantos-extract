@@ -119,20 +119,33 @@ teste em `UpscaleRunnerTests`:**
    (`realesr-animevideov3`) que é o mais rápido de todos (2,6s) mas **ZERA o canal alpha** —
    todo elemento extraído é PNG transparente (M6), então sairia invisível no Corel.
 
-**EXIGE uma GPU com driver Vulkan; não tem fallback pra CPU.** `-g -1` devolve `invalid gpu
-device` (exit 255) nesta build (v0.2.5.0). Numa VM sem aceleração 3D o binário morre em
-`vkCreateInstance failed -9` (`VK_ERROR_INCOMPATIBLE_DRIVER` — medido na VM do Dave,
-2026-09-11): o loader do Vulkan vem no Windows, mas o ICD que o implementa vem no DRIVER DA
-PLACA DE VÍDEO, e uma GPU virtual não tem. **Isso não se resolve empacotando DLL nossa** — em
-PC real com Intel/AMD/NVIDIA e driver atualizado funciona; numa VM, só instalando um ICD por
-software (Mesa/lavapipe) à parte, o que seria lento demais pra valer a pena embutir.
-Tratado como `UpscaleStatus.GpuUnavailable`: mensagem própria ("este computador não tem placa
-de vídeo compatível") e os botões de upscale somem da tela toda, em vez de o operador colher o
-mesmo erro peça por peça. Não quebra nada:
-`UpscaleRunner.Run`/`UpscaleElement` tratam qualquer exit não-zero como degradação (a peça
-original continua no lugar, nada trava), e a tela de resultado nem mostra o botão quando o
-binário não existe (`canUpscale`). Tempos reais nesta VM de dev, imagem 1254×1254 → 2508×2508:
-NVIDIA RTX 3050 dedicada ~8s; Intel Iris Xe integrada bem mais lento (~80s+ no modelo antigo).
+**Sem GPU com Vulkan, roda por CPU — mas só com o modelo compacto (Dave, 2026-09-12).** O
+binário exige um device Vulkan: numa VM sem aceleração 3D ele morre em `vkCreateInstance failed
+-9` (`VK_ERROR_INCOMPATIBLE_DRIVER`, medido na VM do Dave) porque o loader do Vulkan vem no
+Windows mas o ICD que o implementa vem no DRIVER DA PLACA DE VÍDEO — e GPU virtual não tem.
+A saída é o **lavapipe** (`assets/upscale/cpu-vulkan/`), o Vulkan por SOFTWARE da Mesa: um ICD
+apontado por `VK_DRIVER_FILES`/`VK_ICD_FILENAMES` só no processo filho, e o MESMO binário passa
+a rodar 100% em CPU. Medições reais (1254×1254, esta máquina de dev):
+
+| Caminho | Tempo | Saída |
+|---|---|---|
+| GPU (Intel Iris Xe), `realesrgan-x4plus-anime` `-s 4` | 9s | 5016² |
+| CPU (lavapipe), **mesmo modelo** `-s 4` | **640s (10,7 min)** | 5016² |
+| CPU (lavapipe), `realesr-animevideov3` `-s 2` | **89s** | 2508² |
+| Dozen (Vulkan sobre D3D12, `vulkan_dzn.dll`) | falhou (`invalid gpu device`) | — |
+
+Por isso o modo CPU usa **outro modelo** (`UpscalePaths.CpuModelName`): compacto (SRVGG 1,2MB
+contra RRDB 8,9MB) e com escala **2 nativa**, então já entrega o 2× do produto sem passar pelo
+`ImageDownscaler`. Contrapartida: ele ZERA o canal alpha, resolvido por
+`MantosExtract.Windows.ImageAlphaSplitter` — separa o alpha, manda só o RGB pela rede, escala o
+alpha por bicúbico e recombina (o "Fundo" é opaco e nem passa por isso: `TrySplit` devolve
+false). Tudo por `LockBits`; GetPixel/SetPixel em 6,3M de pixels levaria mais que o upscale.
+
+Fluxo pro operador: `UpscaleStatus.GpuUnavailable` não é mais um beco sem saída — a tela
+oferece **"Upscale (CPU)"** avisando que leva alguns minutos, e só esconde o upscale de vez se
+nem o lavapipe estiver instalado. Nada disso quebra a extração: qualquer exit não-zero é
+degradação (a peça original continua no lugar) e o botão só aparece se os arquivos existem
+(`IsUsable`/`HasCpuFallback`).
 
 
 **Nota de arquitetura (decisão técnica, ver CHANGELOG):** o spec original citava a

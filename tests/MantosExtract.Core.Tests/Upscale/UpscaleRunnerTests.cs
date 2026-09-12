@@ -115,6 +115,58 @@ namespace MantosExtract.Core.Tests.Upscale
         }
 
         [Fact]
+        public void CpuModel_IsTheCompactOne_AndItsNativeScaleIsAlreadyTheShippedTwo()
+        {
+            // O modelo principal (RRDB) levou 640s numa peça em CPU pura; este (SRVGG compacto)
+            // levou 89s na mesma imagem. Além disso tem escala 2 NATIVA, então o modo CPU não
+            // passa pelo ImageDownscaler — reduzir um 2× pela metade entregaria 1×.
+            Assert.Equal("realesr-animevideov3", UpscalePaths.CpuModelName);
+            Assert.Equal(2, UpscalePaths.CpuNativeScale);
+            Assert.NotEqual(UpscalePaths.ModelName, UpscalePaths.CpuModelName);
+        }
+
+        [Fact]
+        public void HasCpuFallback_RequiresTheSoftwareVulkanAndTheCompactModel()
+        {
+            string exe = Path.Combine(_tempDir, UpscalePaths.InstalledExeName);
+            File.WriteAllText(exe, "exe");
+            var paths = new UpscalePaths(exe, _tempDir);
+
+            Assert.False(paths.HasCpuFallback); // nada instalado ainda
+
+            Directory.CreateDirectory(paths.CpuVulkanDir);
+            File.WriteAllText(paths.CpuIcdPath, "{}");
+            File.WriteAllText(Path.Combine(paths.CpuVulkanDir, "vulkan_lvp.dll"), "dll");
+            Assert.False(paths.HasCpuFallback); // ICD sem o modelo compacto não serve
+
+            Directory.CreateDirectory(paths.ModelsDir);
+            string stem = Path.Combine(paths.ModelsDir,
+                UpscalePaths.CpuModelName + "-x" + UpscalePaths.CpuNativeScale);
+            File.WriteAllText(stem + ".param", "p");
+            File.WriteAllText(stem + ".bin", "b");
+            Assert.True(paths.HasCpuFallback);
+        }
+
+        [Fact]
+        public void Run_CpuRequestedWithoutSoftwareVulkan_SaysSo_WithoutSpawning()
+        {
+            // Pedir CPU numa instalação que não trouxe o lavapipe tem que falhar explicando,
+            // não subir o binário pra ele morrer em vkCreateInstance de novo.
+            string exe = Path.Combine(_tempDir, UpscalePaths.InstalledExeName);
+            File.WriteAllText(exe, "exe");
+            Directory.CreateDirectory(Path.Combine(_tempDir, "models"));
+            var paths = new UpscalePaths(exe, _tempDir);
+            File.WriteAllText(Path.Combine(paths.ModelsDir, UpscalePaths.ModelName + ".param"), "p");
+            File.WriteAllText(Path.Combine(paths.ModelsDir, UpscalePaths.ModelName + ".bin"), "b");
+
+            UpscaleResult result = new UpscaleRunner(paths)
+                .Run(Path.Combine(_tempDir, "in.png"), 30, UpscaleDevice.Cpu);
+
+            Assert.Equal(UpscaleStatus.BinaryMissing, result.Status);
+            Assert.Contains("Vulkan por software", result.Diagnostics);
+        }
+
+        [Fact]
         public void ModelsDir_SitsNextToTheExecutable()
         {
             var paths = new UpscalePaths(@"C:\Program Files\MantosExtract\upscale\realesrgan-ncnn-vulkan.exe");

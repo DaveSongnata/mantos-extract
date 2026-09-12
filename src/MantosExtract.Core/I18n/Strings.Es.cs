@@ -109,6 +109,9 @@ namespace MantosExtract.Core.I18n
             ["me.result.upscale.errorMissing"] = "El archivo de esta pieza ya no está disponible.",
             ["me.result.upscale.errorUnavailable"] = "El upscale no está instalado en esta máquina.",
             ["me.result.upscale.errorNoGpu"] = "Esta computadora no tiene tarjeta de vídeo compatible (Vulkan) para el upscale. La extracción sigue funcionando normalmente.",
+            ["me.result.upscale.errorNoGpuTryCpu"] = "Esta computadora no tiene tarjeta de vídeo compatible. Se puede hacer con el procesador, pero tarda unos minutos por pieza — haga clic en \"Upscale (CPU)\" para intentarlo.",
+            ["me.result.upscale.buttonCpu"] = "Upscale (CPU)",
+            ["me.result.upscale.titleCpu"] = "Duplicar la resolución usando el procesador — funciona sin tarjeta de vídeo, pero tarda unos minutos",
             ["me.result.upscale.errorGone"] = "La pieza ya no está en el documento — el archivo en alta quedó guardado en la carpeta.",
 
             ["me.error.network.title"] = "No pudimos conectar",

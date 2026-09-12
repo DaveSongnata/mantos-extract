@@ -811,6 +811,7 @@
     lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
     canUpscale: false,        // binário do Real-ESRGAN presente nesta máquina (o C# informa)
     upscale: {},              // id -> "idle"|"running"|"done" (upscale opcional, tela de resultado)
+    upscaleDevice: "gpu",     // vira "cpu" quando a máquina não tem GPU com Vulkan
     lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
   };
@@ -1209,15 +1210,18 @@
       okLabel.title = T("me.result.upscale.doneTitle");
       wrap.appendChild(okLabel);
     } else {
+      // state.upscaleDevice === "cpu" depois que a GPU faltou: o botão passa a dizer que vai
+      // pela CPU (mais lento), em vez de esconder a possibilidade ou repetir o mesmo erro.
+      var viaCpu = state.upscaleDevice === "cpu";
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn-sm";
-      btn.textContent = T("me.result.upscale.button");
-      btn.title = T("me.result.upscale.title");
+      btn.textContent = T(viaCpu ? "me.result.upscale.buttonCpu" : "me.result.upscale.button");
+      btn.title = T(viaCpu ? "me.result.upscale.titleCpu" : "me.result.upscale.title");
       btn.addEventListener("click", function(){
         state.upscale[id] = "running";
         renderResultStatusCell(cell, id, p);
-        send({cmd:"upscaleElement", id: id});
+        send({cmd:"upscaleElement", id: id, device: state.upscaleDevice || "gpu"});
       });
       wrap.appendChild(btn);
     }
@@ -1230,10 +1234,12 @@
     if (msg.stage === "running") state.upscale[msg.id] = "running";
     else state.upscale[msg.id] = msg.ok ? "done" : "idle";
 
-    // Esta máquina não tem GPU compatível: o botão não vai funcionar em peça nenhuma, então
-    // some com todos de uma vez em vez de deixar o operador descobrir um por um.
-    if (msg.disableUpscale) {
-      state.canUpscale = false;
+    // Sem GPU compatível. Dois desfechos: ou existe o caminho por CPU e TODOS os botões passam
+    // a oferecê-lo (mais lento, mas funciona), ou nem isso existe e os botões somem de vez —
+    // em nenhum dos dois o operador deve descobrir clicando peça por peça.
+    if (msg.offerCpu) state.upscaleDevice = "cpu";
+    if (msg.disableUpscale) state.canUpscale = false;
+    if (msg.offerCpu || msg.disableUpscale) {
       Object.keys(state.extractProgress).forEach(function(otherId){
         var otherCell = document.querySelector('#result-' + cssEscapeId(otherId) + ' .stage');
         if (otherCell) renderResultStatusCell(otherCell, otherId, state.extractProgress[otherId]);
@@ -1266,6 +1272,7 @@
     state.lastFailedIds = [];
     state.canUpscale = !!msg.canUpscale;
     state.upscale = {};
+    state.upscaleDevice = "gpu";
     $("resultUpscaleError").hidden = true;
 
     Object.keys(state.extractProgress).forEach(function(id){

@@ -116,6 +116,7 @@ namespace MantosExtract.AddIn.Ui
                 string folderPath = "";
                 string extractionQuality = "";
                 string elementId = "";
+                string device = "";
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -130,6 +131,7 @@ namespace MantosExtract.AddIn.Ui
                     folderPath = Str(root, "path");
                     extractionQuality = Str(root, "quality");
                     elementId = Str(root, "id");
+                    device = Str(root, "device");
                 }
 
                 // status/cancel/cancelElement furam o busy-guard de propósito: cancelar só faz
@@ -173,7 +175,15 @@ namespace MantosExtract.AddIn.Ui
                     // WaitForExit, ~8s): rodar direto aqui travaria a thread de eventos do Corel.
                     // Passa pelo RunAsync de propósito — o guard de "ocupado" é o que impede dois
                     // upscales ao mesmo tempo mexendo no documento.
-                    case "upscaleElement": { string upId = elementId; RunAsync(ct => Task.Run(() => UpscaleElement(upId), ct)); break; }
+                    case "upscaleElement":
+                    {
+                        string upId = elementId;
+                        // "cpu" só chega aqui se o operador clicou no botão de CPU depois de a GPU
+                        // ter faltado — nunca é o padrão (é ~10× mais lento).
+                        UpscaleDevice dev = device == "cpu" ? UpscaleDevice.Cpu : UpscaleDevice.Gpu;
+                        RunAsync(ct => Task.Run(() => UpscaleElement(upId, dev), ct));
+                        break;
+                    }
 
                     default: MantosExtractLog.Write("OnWebMessage: comando desconhecido '" + cmd + "'"); break;
                 }
@@ -715,7 +725,7 @@ namespace MantosExtract.AddIn.Ui
         /// versão nova está pronta e encaixada, então qualquer erro no meio deixa o operador
         /// exatamente com o que ele já tinha.
         /// </summary>
-        private void UpscaleElement(string id)
+        private void UpscaleElement(string id, UpscaleDevice device)
         {
             if (string.IsNullOrEmpty(id)) return;
 
@@ -726,21 +736,47 @@ namespace MantosExtract.AddIn.Ui
                 return;
             }
 
-            Post(new { type = "upscaleProgress", id, stage = "running" });
+            Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
 
-            UpscaleResult upscale = _upscaleRunner.Run(finalPath, timeoutSeconds: 300);
+            // No modo CPU o modelo compacto zera o alpha, então o alpha sai de cena antes e volta
+            // depois (ImageAlphaSplitter). Numa imagem já opaca — o "Fundo" é sempre — TrySplit
+            // devolve false e o arquivo segue direto, sem custo nenhum.
+            string upscaleInput = finalPath;
+            string? rgbPath = null, alphaPath = null;
+            if (device == UpscaleDevice.Cpu)
+            {
+                string baseName = Path.GetFileNameWithoutExtension(finalPath);
+                string dir = WorkDir();
+                rgbPath = Path.Combine(dir, baseName + "_rgb.png");
+                alphaPath = Path.Combine(dir, baseName + "_alpha.png");
+                if (ImageAlphaSplitter.TrySplit(finalPath, rgbPath, alphaPath)) upscaleInput = rgbPath;
+                else { rgbPath = null; alphaPath = null; }
+            }
+
+            var sw = Stopwatch.StartNew();
+            // Timeout do modo CPU é MUITO maior: 89s medidos numa máquina de dev, e a máquina do
+            // operador pode ser bem mais lenta — 300s ali derrubaria um upscale que ia dar certo.
+            UpscaleResult upscale = _upscaleRunner.Run(upscaleInput,
+                timeoutSeconds: device == UpscaleDevice.Cpu ? 1800 : 300, device: device);
+            sw.Stop();
+            MantosExtractLog.Write("Upscale " + device + " " + upscale.Status + " for " + id +
+                " em " + Math.Round(sw.Elapsed.TotalSeconds, 1) + "s" +
+                (string.IsNullOrEmpty(upscale.Diagnostics) ? "" : " — " + upscale.Diagnostics));
+
             if (upscale.Status != UpscaleStatus.Success)
             {
-                MantosExtractLog.Write("Upscale " + upscale.Status + " for " + id +
-                    (string.IsNullOrEmpty(upscale.Diagnostics) ? "" : " — " + upscale.Diagnostics));
+                if (rgbPath != null) { TryDelete(rgbPath); TryDelete(alphaPath!); }
 
                 if (upscale.Status == UpscaleStatus.GpuUnavailable)
                 {
-                    // Não é erro desta peça nem coisa de tentar de novo: esta MÁQUINA não tem GPU
-                    // com Vulkan. Some com os botões de upscale da tela toda em vez de deixar o
-                    // operador clicando peça por peça pra colher o mesmo aviso N vezes.
+                    // Não é erro desta peça: esta MÁQUINA não tem GPU com Vulkan. Em vez de só
+                    // avisar, oferece o caminho por CPU (mais lento, porém funciona) — e só
+                    // desabilita o upscale de vez se nem esse caminho estiver disponível.
+                    bool cpuOffer = _upscalePaths.HasCpuFallback;
                     Post(new { type = "upscaleProgress", id, stage = "done", ok = false,
-                               error = L("me.result.upscale.errorNoGpu"), disableUpscale = true });
+                               error = L(cpuOffer ? "me.result.upscale.errorNoGpuTryCpu"
+                                                  : "me.result.upscale.errorNoGpu"),
+                               offerCpu = cpuOffer, disableUpscale = !cpuOffer });
                     return;
                 }
 
@@ -750,19 +786,44 @@ namespace MantosExtract.AddIn.Ui
                 return;
             }
 
-            // 4× nativo -> 2× final (M8). O arquivo nativo é descartado logo em seguida: ele é
-            // 4× a área do que o produto entrega e não serve pra mais nada.
+            // O modo GPU devolve a escala nativa do modelo (4×) e precisa da metade pro 2× do
+            // produto (M8); o modo CPU usa um modelo 2× nativo e já entrega pronto.
             string nativePath = upscale.OutputPath!;
-            string halvedPath = Path.Combine(Path.GetDirectoryName(nativePath)!,
-                Path.GetFileNameWithoutExtension(nativePath) + "_half.png");
-
-            bool halved = ImageDownscaler.TryHalve(nativePath, halvedPath);
-            if (!halved)
+            string finishedPath;
+            if (upscale.ScaleApplied > UpscalePaths.CpuNativeScale)
             {
-                MantosExtractLog.Write("Upscale: downscale 4x->2x falhou for " + id);
-                TryDelete(nativePath);
-                PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
-                return;
+                finishedPath = Path.Combine(Path.GetDirectoryName(nativePath)!,
+                    Path.GetFileNameWithoutExtension(nativePath) + "_half.png");
+                if (!ImageDownscaler.TryHalve(nativePath, finishedPath))
+                {
+                    MantosExtractLog.Write("Upscale: downscale 4x->2x falhou for " + id);
+                    TryDelete(nativePath);
+                    if (rgbPath != null) { TryDelete(rgbPath); TryDelete(alphaPath!); }
+                    PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
+                    return;
+                }
+            }
+            else finishedPath = nativePath;
+
+            // Devolve a transparência que foi separada antes de passar pela rede.
+            string halvedPath = finishedPath;
+            string? recombinedPath = null;
+            if (alphaPath != null)
+            {
+                recombinedPath = Path.Combine(Path.GetDirectoryName(finishedPath)!,
+                    Path.GetFileNameWithoutExtension(finishedPath) + "_rgba.png");
+                if (ImageAlphaSplitter.TryCombine(finishedPath, alphaPath, recombinedPath))
+                {
+                    halvedPath = recombinedPath;
+                }
+                else
+                {
+                    MantosExtractLog.Write("Upscale: recombinar alpha falhou for " + id);
+                    TryDelete(nativePath); TryDelete(finishedPath);
+                    TryDelete(rgbPath!); TryDelete(alphaPath);
+                    PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
+                    return;
+                }
             }
 
             try
@@ -789,7 +850,10 @@ namespace MantosExtract.AddIn.Ui
             finally
             {
                 TryDelete(nativePath);
-                TryDelete(halvedPath);
+                TryDelete(finishedPath);
+                if (recombinedPath != null) TryDelete(recombinedPath);
+                if (rgbPath != null) TryDelete(rgbPath);
+                if (alphaPath != null) TryDelete(alphaPath);
             }
         }
 

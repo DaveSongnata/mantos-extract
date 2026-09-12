@@ -18,6 +18,8 @@ shared/bin/
 assets/upscale/*.exe
 assets/upscale/*.dll
 assets/upscale/models/
+# Vulkan por software (Mesa/lavapipe, ~54MB) — permite o upscale rodar sem placa de vídeo.
+assets/upscale/cpu-vulkan/
 
 # Chaves privadas / segredos — nunca versionar
 *.pfx

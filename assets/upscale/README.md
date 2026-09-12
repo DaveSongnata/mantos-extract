@@ -22,13 +22,37 @@ Dentro do zip, copiar pra cá:
 assets/upscale/realesrgan-ncnn-vulkan.exe
 assets/upscale/vcomp140.dll
 assets/upscale/vcomp140d.dll
-assets/upscale/models/realesrgan-x4plus-anime.bin
+assets/upscale/models/realesrgan-x4plus-anime.bin      <- modo GPU
 assets/upscale/models/realesrgan-x4plus-anime.param
+assets/upscale/models/realesr-animevideov3-x2.bin      <- modo CPU
+assets/upscale/models/realesr-animevideov3-x2.param
 ```
 
 **Não copiar os outros modelos do zip** (`realesrgan-x4plus`, `realesrnet-x4plus`,
-`realesr-animevideov3*`) — não são usados e só engordam o instalador à toa (o x4plus sozinho
-tem 33MB contra os 8,9MB deste).
+`realesr-animevideov3-x3/x4`) — não são usados e só engordam o instalador à toa (o x4plus
+sozinho tem 33MB contra os 8,9MB do que usamos).
+
+## Modo CPU (máquina sem placa de vídeo) — `cpu-vulkan/`
+
+O binário exige um device Vulkan, e numa VM sem aceleração 3D não existe nenhum (morre em
+`vkCreateInstance failed -9`). Pra esses casos empacotamos o **lavapipe**, o Vulkan por
+SOFTWARE da Mesa: apontado por `VK_DRIVER_FILES` só no processo filho, o mesmo binário roda
+100% em CPU.
+
+- Repo: `pal1000/mesa-dist-win`
+- Release usado: **26.2.0**, asset `mesa3d-26.2.0-release-msvc.7z`
+- Copiar de `x64/` pra cá (os dois juntos — o ICD referencia a DLL por caminho relativo):
+
+```
+assets/upscale/cpu-vulkan/lvp_icd.x86_64.json
+assets/upscale/cpu-vulkan/vulkan_lvp.dll     (~54MB)
+```
+
+**Não copiar `vulkan_dzn.dll`** (Dozen, Vulkan sobre D3D12): testado, devolve
+`invalid gpu device` — não serve.
+
+Tempos medidos (1254×1254, máquina de dev): GPU 9s · CPU com o modelo compacto **89s** · CPU
+com o modelo de GPU 640s (por isso o modo CPU usa outro modelo, ver `UpscalePaths.CpuModelName`).
 
 ## Por que `realesrgan-x4plus-anime` (o nome engana)
 
@@ -59,6 +83,10 @@ melhor que um 2× direto, porque reduzir de 4× faz supersampling e suaviza os a
 <install-dir>\upscale\vcomp140d.dll
 <install-dir>\upscale\models\realesrgan-x4plus-anime.bin
 <install-dir>\upscale\models\realesrgan-x4plus-anime.param
+<install-dir>\upscale\models\realesr-animevideov3-x2.bin
+<install-dir>\upscale\models\realesr-animevideov3-x2.param
+<install-dir>\upscale\cpu-vulkan\lvp_icd.x86_64.json
+<install-dir>\upscale\cpu-vulkan\vulkan_lvp.dll
 ```
 
 `build-all.ps1` copia `assets/upscale/*` (recursivo) pra `payload/upscale/` se

@@ -27,10 +27,26 @@ namespace MantosExtract.Core.Upscale
         Failed,
     }
 
+    /// <summary>Onde a rede roda. Sempre <see cref="Gpu"/> por padrão; <see cref="Cpu"/> só
+    /// quando o operador pede explicitamente, porque é ~10× mais lento (89s contra 9s, medido).</summary>
+    public enum UpscaleDevice
+    {
+        Gpu,
+        /// <summary>Vulkan por SOFTWARE (lavapipe) + modelo compacto. Roda em máquina sem placa
+        /// de vídeo nenhuma — VM incluída.</summary>
+        Cpu,
+    }
+
     public sealed class UpscaleResult
     {
         public UpscaleStatus Status { get; }
         public string? OutputPath { get; }
+
+        /// <summary>Escala que o arquivo em <see cref="OutputPath"/> realmente tem. O modo GPU
+        /// devolve a escala nativa do modelo (4×) e o chamador reduz pela metade; o modo CPU usa
+        /// um modelo com escala 2 nativa e já devolve o 2× final. Quem chama tem que olhar isto
+        /// em vez de assumir — reduzir um 2× pela metade entregaria 1×.</summary>
+        public int ScaleApplied { get; }
 
         /// <summary>O que o binário disse antes de falhar (exit code + últimas linhas de
         /// stdout/stderr) + o inventário da pasta de modelos. Existe porque um "Failed" sozinho no
@@ -38,14 +54,16 @@ namespace MantosExtract.Core.Upscale
         /// dele em 2,7s e o log não tinha UMA linha dizendo por quê). Nulo quando deu certo.</summary>
         public string? Diagnostics { get; }
 
-        private UpscaleResult(UpscaleStatus status, string? outputPath, string? diagnostics = null)
+        private UpscaleResult(UpscaleStatus status, string? outputPath, string? diagnostics = null, int scaleApplied = 0)
         {
             Status = status;
             OutputPath = outputPath;
             Diagnostics = diagnostics;
+            ScaleApplied = scaleApplied;
         }
 
-        public static UpscaleResult Ok(string outputPath) => new UpscaleResult(UpscaleStatus.Success, outputPath);
+        public static UpscaleResult Ok(string outputPath, int scaleApplied) =>
+            new UpscaleResult(UpscaleStatus.Success, outputPath, null, scaleApplied);
         public static UpscaleResult Of(UpscaleStatus status, string? diagnostics = null) =>
             new UpscaleResult(status, null, diagnostics);
     }
@@ -71,21 +89,40 @@ namespace MantosExtract.Core.Upscale
         /// Never throws for an expected failure mode (missing binary, timeout, bad exit) — those
         /// are all just a <see cref="UpscaleStatus"/> the caller degrades on (Fase 4: import the
         /// original PNG instead of blocking the whole element).</summary>
-        public UpscaleResult Run(string inputPngPath, int timeoutSeconds = 90)
+        public UpscaleResult Run(string inputPngPath, int timeoutSeconds = 90,
+                                 UpscaleDevice device = UpscaleDevice.Gpu)
         {
             // Modelo ausente conta como BinaryMissing: é instalação incompleta do mesmo jeito, e
             // deixar seguir só troca uma mensagem clara por um crash do processo filho.
             if (!_paths.IsUsable)
                 return UpscaleResult.Of(UpscaleStatus.BinaryMissing, DescribeFailure("(não chegou a rodar)", ""));
 
+            if (device == UpscaleDevice.Cpu && !_paths.HasCpuFallback)
+                return UpscaleResult.Of(UpscaleStatus.BinaryMissing,
+                    "modo CPU pedido, mas o Vulkan por software não está instalado: icd=" +
+                    (File.Exists(_paths.CpuIcdPath) ? "ok" : "AUSENTE"));
+
             Directory.CreateDirectory(_paths.TempDir);
+            int scale = device == UpscaleDevice.Cpu ? UpscalePaths.CpuNativeScale : UpscalePaths.NativeScale;
             string outputPath = Path.Combine(_paths.TempDir,
-                Path.GetFileNameWithoutExtension(inputPngPath) + "_native" + UpscalePaths.NativeScale + "x.png");
+                Path.GetFileNameWithoutExtension(inputPngPath) + "_native" + scale + "x.png");
+
+            // No modo CPU não há tile automático que salve nem GPU pra faltar memória: uma
+            // tentativa só, com o modelo compacto, e o que falhar falhou.
+            if (device == UpscaleDevice.Cpu)
+            {
+                UpscaleStatus cpuStatus = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds,
+                                                  out string cpuOutput, device);
+                return cpuStatus == UpscaleStatus.Success
+                    ? UpscaleResult.Ok(outputPath, scale)
+                    : UpscaleResult.Of(cpuStatus,
+                        DescribeFailure(DescribeAttempt(AutoTile, UpscaleDevice.Cpu), cpuOutput));
+            }
 
             // Primeira tentativa: tile automático (o binário dimensiona pela VRAM que ele acha que
             // tem). É o mais rápido quando dá certo.
             UpscaleStatus status = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds, out string output);
-            if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
+            if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath, scale);
 
             // Sem Vulkan não adianta tentar de novo com tile menor: o processo nem chega a alocar
             // nada, morre em vkCreateInstance.
@@ -102,7 +139,7 @@ namespace MantosExtract.Core.Upscale
                 return UpscaleResult.Of(status, DescribeFailure(DescribeAttempt(AutoTile), output));
 
             UpscaleStatus retry = RunOnce(inputPngPath, outputPath, FallbackTile, timeoutSeconds, out string retryOutput);
-            if (retry == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
+            if (retry == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath, scale);
 
             // A 1ª tentativa pode falhar calada e só a 2ª revelar que o problema é Vulkan (foi o
             // que aconteceu na máquina do Dave, 2026-09-11), então a checagem vale pras duas.
@@ -138,24 +175,38 @@ namespace MantosExtract.Core.Upscale
         private const int FallbackTile = 128;
 
         private UpscaleStatus RunOnce(string inputPngPath, string outputPath, int tileSize,
-                                      int timeoutSeconds, out string processOutput)
+                                      int timeoutSeconds, out string processOutput,
+                                      UpscaleDevice device = UpscaleDevice.Gpu)
         {
             if (File.Exists(outputPath)) File.Delete(outputPath);
 
+            bool cpu = device == UpscaleDevice.Cpu;
             string arguments = BuildArguments(inputPngPath, outputPath, _paths.ModelsDir,
-                UpscalePaths.ModelName, UpscalePaths.NativeScale, tileSize);
+                cpu ? UpscalePaths.CpuModelName : UpscalePaths.ModelName,
+                cpu ? UpscalePaths.CpuNativeScale : UpscalePaths.NativeScale, tileSize);
 
             // Roda COM O CWD na pasta do próprio binário. O Real-ESRGAN resolve o caminho do
             // modelo de forma peculiar (com um -m que ele não acha, a mensagem de erro sai com o
             // diretório do exe concatenado na frente do caminho absoluto), e dentro do CorelDRAW
             // o CWD herdado é o do host, não o nosso — fixar isso tira uma variável inteira da
             // equação em vez de torcer pro comportamento ser o mesmo nas duas máquinas.
+            // No modo CPU, o ICD do lavapipe é apontado por variável de ambiente SÓ neste
+            // processo filho: é assim que o loader do Vulkan escolhe um driver por software em
+            // vez de procurar GPU. VK_DRIVER_FILES é o nome atual e VK_ICD_FILENAMES o antigo —
+            // manda os dois porque a versão do loader é a do Windows da máquina, não a nossa.
             return RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds,
-                out processOutput, Path.GetDirectoryName(_paths.ExecutablePath));
+                out processOutput, Path.GetDirectoryName(_paths.ExecutablePath),
+                cpu ? _paths.CpuIcdPath : null);
         }
 
-        private string DescribeAttempt(int tileSize) => BuildArguments("<entrada>", "<saida>",
-            _paths.ModelsDir, UpscalePaths.ModelName, UpscalePaths.NativeScale, tileSize);
+        private string DescribeAttempt(int tileSize, UpscaleDevice device = UpscaleDevice.Gpu)
+        {
+            bool cpu = device == UpscaleDevice.Cpu;
+            string args = BuildArguments("<entrada>", "<saida>", _paths.ModelsDir,
+                cpu ? UpscalePaths.CpuModelName : UpscalePaths.ModelName,
+                cpu ? UpscalePaths.CpuNativeScale : UpscalePaths.NativeScale, tileSize);
+            return cpu ? args + " [CPU: VK_DRIVER_FILES=" + _paths.CpuIcdPath + "]" : args;
+        }
 
         /// <summary>Junta tudo que ajuda a explicar uma falha numa linha só de log: os argumentos
         /// reais, o que o processo imprimiu, e se os arquivos que ele precisa estão mesmo no
@@ -232,7 +283,8 @@ namespace MantosExtract.Core.Upscale
 
         internal static UpscaleStatus RunProcess(string exePath, string arguments, string expectedOutputPath,
                                                  int timeoutSeconds, out string processOutput,
-                                                 string? workingDirectory = null)
+                                                 string? workingDirectory = null,
+                                                 string? vulkanIcdPath = null)
         {
             var psi = new ProcessStartInfo
             {
@@ -247,6 +299,12 @@ namespace MantosExtract.Core.Upscale
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+
+            if (!string.IsNullOrEmpty(vulkanIcdPath))
+            {
+                psi.EnvironmentVariables["VK_DRIVER_FILES"] = vulkanIcdPath;   // loader atual
+                psi.EnvironmentVariables["VK_ICD_FILENAMES"] = vulkanIcdPath;  // loader antigo
+            }
 
             var captured = new List<string>();
             void Capture(string? line)

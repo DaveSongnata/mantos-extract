@@ -46,6 +46,7 @@ namespace MantosExtract.Core.Upscale
             ExecutablePath = executablePath ?? throw new ArgumentNullException(nameof(executablePath));
             string? exeDir = Path.GetDirectoryName(ExecutablePath);
             ModelsDir = string.IsNullOrEmpty(exeDir) ? "models" : Path.Combine(exeDir, "models");
+            CpuVulkanDir = string.IsNullOrEmpty(exeDir) ? "cpu-vulkan" : Path.Combine(exeDir, "cpu-vulkan");
             TempDir = tempDir ?? Path.Combine(Path.GetTempPath(), "MantosExtract", "upscale");
         }
 
@@ -56,6 +57,39 @@ namespace MantosExtract.Core.Upscale
         /// <summary>Caminho dos dois arquivos do modelo (o binário sozinho não faz nada).</summary>
         public string ModelParamPath => Path.Combine(ModelsDir, ModelName + ".param");
         public string ModelBinPath => Path.Combine(ModelsDir, ModelName + ".bin");
+
+        /// <summary>
+        /// Modelo do modo CPU. É outro de propósito: o <see cref="ModelName"/> (RRDB) levou
+        /// 640s — 10,7 min — pra uma peça em CPU pura, enquanto este (SRVGG compacto, 1,2MB
+        /// contra 8,9MB) levou 89s na MESMA imagem e máquina. Medido, não estimado
+        /// (2026-09-12). Tem escala 2 NATIVA (<c>realesr-animevideov3-x2.param</c>), então no
+        /// modo CPU o resultado já sai no 2× do produto e não passa pelo ImageDownscaler.
+        /// Contrapartida: ele ZERA o canal alpha, tratado separando o alpha antes (ver
+        /// ImageAlphaSplitter) — por isso não serve como modelo principal.
+        /// </summary>
+        public const string CpuModelName = "realesr-animevideov3";
+
+        /// <summary>Escala nativa do modelo de CPU — já é o 2× final (M8).</summary>
+        public const int CpuNativeScale = 2;
+
+        /// <summary>Nome do ICD (manifesto de driver Vulkan) do lavapipe, o Vulkan por SOFTWARE
+        /// da Mesa. É o que faz o mesmo binário rodar numa máquina sem GPU: o loader do Vulkan
+        /// passa a enxergar este driver em CPU em vez de nenhum.</summary>
+        public const string CpuIcdFileName = "lvp_icd.x86_64.json";
+
+        /// <summary>Pasta do Vulkan-em-software, ao lado do binário (o ICD referencia a DLL por
+        /// caminho relativo, então os dois têm que ficar juntos).</summary>
+        public string CpuVulkanDir { get; }
+        public string CpuIcdPath => Path.Combine(CpuVulkanDir, CpuIcdFileName);
+
+        /// <summary>True quando dá pra oferecer "tentar com CPU": exige o ICD do lavapipe, a DLL
+        /// dele e o modelo compacto.</summary>
+        public bool HasCpuFallback =>
+            ExecutableExists
+            && File.Exists(CpuIcdPath)
+            && File.Exists(Path.Combine(CpuVulkanDir, "vulkan_lvp.dll"))
+            && File.Exists(Path.Combine(ModelsDir, CpuModelName + "-x" + CpuNativeScale + ".param"))
+            && File.Exists(Path.Combine(ModelsDir, CpuModelName + "-x" + CpuNativeScale + ".bin"));
 
         /// <summary>
         /// O que realmente interessa antes de oferecer upscale pro operador: binário E modelo.

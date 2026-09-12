@@ -109,6 +109,9 @@ namespace MantosExtract.Core.I18n
             ["me.result.upscale.errorMissing"] = "This piece's file is no longer available.",
             ["me.result.upscale.errorUnavailable"] = "Upscaling is not installed on this machine.",
             ["me.result.upscale.errorNoGpu"] = "This computer has no compatible graphics card (Vulkan) for upscaling. Extraction keeps working normally.",
+            ["me.result.upscale.errorNoGpuTryCpu"] = "This computer has no compatible graphics card. It can run on the processor instead, but takes a few minutes per piece — click \"Upscale (CPU)\" to try.",
+            ["me.result.upscale.buttonCpu"] = "Upscale (CPU)",
+            ["me.result.upscale.titleCpu"] = "Double the resolution using the processor — works without a graphics card, but takes a few minutes",
             ["me.result.upscale.errorGone"] = "The piece is no longer in the document — the high-res file was kept in the folder.",
 
             ["me.error.network.title"] = "We couldn't connect",

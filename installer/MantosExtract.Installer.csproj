@@ -86,6 +86,13 @@
     <EmbeddedResource Include="@(_UpscaleModels)">
       <LogicalName>addon.upscale/models/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- Vulkan por software (lavapipe/Mesa): é o que permite o upscale rodar numa máquina SEM
+         placa de vídeo compatível (medido: 89s por peça com o modelo compacto, contra 9s na
+         GPU). Mesma regra do models/ acima — precisa de item próprio, o glob não é recursivo. -->
+    <_UpscaleCpuVulkan Include="../dist/payload/upscale/cpu-vulkan/*" />
+    <EmbeddedResource Include="@(_UpscaleCpuVulkan)">
+      <LogicalName>addon.upscale/cpu-vulkan/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- Licence attribution travels WITH the binaries, not only in the repo. -->
