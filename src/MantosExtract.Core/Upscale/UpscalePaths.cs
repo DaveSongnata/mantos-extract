@@ -82,6 +82,11 @@ namespace MantosExtract.Core.Upscale
         public string CpuVulkanDir { get; }
         public string CpuIcdPath => Path.Combine(CpuVulkanDir, CpuIcdFileName);
 
+        /// <summary>Manifesto que é realmente entregue ao loader: uma cópia nossa em TempDir com
+        /// o caminho da DLL ABSOLUTO (ver UpscaleRunner.PrepareCpuIcd). Só usado se existir; do
+        /// contrário vale o CpuIcdPath original.</summary>
+        public string EffectiveCpuIcdPath => Path.Combine(TempDir, "mantos-lvp-icd.json");
+
         /// <summary>True quando dá pra oferecer "tentar com CPU": exige o ICD do lavapipe, a DLL
         /// dele e o modelo compacto.</summary>
         public bool HasCpuFallback =>

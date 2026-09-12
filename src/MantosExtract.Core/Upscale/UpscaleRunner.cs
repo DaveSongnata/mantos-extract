@@ -111,6 +111,7 @@ namespace MantosExtract.Core.Upscale
             // tentativa só, com o modelo compacto, e o que falhar falhou.
             if (device == UpscaleDevice.Cpu)
             {
+                PrepareCpuIcd();
                 UpscaleStatus cpuStatus = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds,
                                                   out string cpuOutput, device);
                 return cpuStatus == UpscaleStatus.Success
@@ -167,6 +168,45 @@ namespace MantosExtract.Core.Upscale
                 || processOutput.IndexOf("no vulkan device", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        /// <summary>
+        /// Reescreve o manifesto do ICD com o caminho ABSOLUTO da DLL, num arquivo nosso em
+        /// TempDir, e passa esse arquivo pro loader.
+        ///
+        /// O ICD que vem do Mesa traz <c>"library_path": ".\\vulkan_lvp.dll"</c> — relativo. A
+        /// especificação diz que isso se resolve a partir da pasta do manifesto, mas o loader
+        /// que vale é o que está instalado no Windows da máquina do cliente, não o nosso: se
+        /// ele resolver a partir do diretório de trabalho (que fixamos na pasta do .exe, um
+        /// nível acima de cpu-vulkan/), a DLL não é encontrada, o ICD é descartado em silêncio e
+        /// o erro que sobra é o mesmo "vkCreateInstance failed / invalid gpu device" de quando
+        /// não há GPU — indistinguível (caso real na VM do Dave, 2026-09-12). Caminho absoluto
+        /// não tem essa ambiguidade.
+        /// </summary>
+        private void PrepareCpuIcd()
+        {
+            try
+            {
+                string dll = Path.Combine(_paths.CpuVulkanDir, "vulkan_lvp.dll");
+                if (!File.Exists(dll)) return;
+
+                string json =
+                    "{\n" +
+                    "    \"ICD\": {\n" +
+                    "        \"api_version\": \"1.2.0\",\n" +
+                    "        \"library_arch\": \"64\",\n" +
+                    "        \"library_path\": \"" + dll.Replace("\\", "\\\\") + "\"\n" +
+                    "    },\n" +
+                    "    \"file_format_version\": \"1.0.0\"\n" +
+                    "}\n";
+
+                Directory.CreateDirectory(_paths.TempDir);
+                File.WriteAllText(_paths.EffectiveCpuIcdPath, json);
+            }
+            catch
+            {
+                // Se não deu pra escrever, RunOnce ainda tenta com o ICD original do Mesa.
+            }
+        }
+
         /// <summary>Tile automático: o binário decide pelo que enxerga de VRAM.</summary>
         private const int AutoTile = 0;
 
@@ -194,9 +234,12 @@ namespace MantosExtract.Core.Upscale
             // processo filho: é assim que o loader do Vulkan escolhe um driver por software em
             // vez de procurar GPU. VK_DRIVER_FILES é o nome atual e VK_ICD_FILENAMES o antigo —
             // manda os dois porque a versão do loader é a do Windows da máquina, não a nossa.
+            string? icd = null;
+            if (cpu)
+                icd = File.Exists(_paths.EffectiveCpuIcdPath) ? _paths.EffectiveCpuIcdPath : _paths.CpuIcdPath;
+
             return RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds,
-                out processOutput, Path.GetDirectoryName(_paths.ExecutablePath),
-                cpu ? _paths.CpuIcdPath : null);
+                out processOutput, Path.GetDirectoryName(_paths.ExecutablePath), icd);
         }
 
         private string DescribeAttempt(int tileSize, UpscaleDevice device = UpscaleDevice.Gpu)
@@ -240,6 +283,30 @@ namespace MantosExtract.Core.Upscale
                 sb.Append("]");
             }
             catch (Exception ex) { sb.Append("erro ao listar: ").Append(ex.Message).Append("]"); }
+
+            // Estado da pasta do Vulkan-em-software COM TAMANHO: File.Exists devolve true pra um
+            // arquivo truncado/zerado, e uma DLL de 54MB extraída pela metade falha do mesmo
+            // jeito que uma ausente (vkCreateInstance failed), sem nada no log que distinga.
+            try
+            {
+                sb.Append(" cpuVulkan=[");
+                if (Directory.Exists(_paths.CpuVulkanDir))
+                {
+                    string[] files = Directory.GetFiles(_paths.CpuVulkanDir);
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(Path.GetFileName(files[i])).Append(':');
+                        try { sb.Append(new FileInfo(files[i]).Length); } catch { sb.Append('?'); }
+                    }
+                    if (files.Length == 0) sb.Append("PASTA VAZIA");
+                }
+                else sb.Append("PASTA NAO EXISTE");
+                sb.Append(" | icd usado=")
+                  .Append(File.Exists(_paths.EffectiveCpuIcdPath) ? "reescrito(absoluto)" : "original(relativo)");
+                sb.Append(']');
+            }
+            catch (Exception ex) { sb.Append("erro: ").Append(ex.Message).Append(']'); }
 
             if (!string.IsNullOrWhiteSpace(processOutput))
                 sb.Append(" saida=[").Append(processOutput).Append("]");
