@@ -1,32 +1,146 @@
 Mantos Extract — Third-Party Notices
+====================================
 
-This product bundles or depends on the following third-party software. Only permissive
-licenses (MIT/Apache-2.0/BSD) are used, matching the standard already set by the sibling
-products (Optimus/THIRD-PARTY-NOTICES.txt).
+Este produto distribui e/ou depende do software de terceiros listado abaixo.
 
---------------------------------------------------------------------------------
-Real-ESRGAN (ncnn-vulkan build) — realesrgan-ncnn-vulkan.exe
---------------------------------------------------------------------------------
-Used for: local 2x upscale of extracted elements (Fase 4, plans/Phase_4.md).
-License: MIT (both the original Real-ESRGAN project and the ncnn-vulkan Windows build).
-Source: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan
+TODAS as licenças envolvidas são PERMISSIVAS (MIT, BSD-2, BSD-3, zlib, Boost, Apache-2.0
+com LLVM exception). NENHUM componente é GPL, LGPL ou AGPL — nada aqui exige abrir o código
+do Mantos Extract nem impõe copyleft ao produto. Verificado componente por componente em
+2026-09-12 (as licenças BSD/MIT exigem, em redistribuição binária, reproduzir o aviso de
+copyright e o disclaimer "na documentação e/ou outros materiais fornecidos com a
+distribuição" — este arquivo é esse material, e ele é instalado junto com o produto:
+installer/Core/InstallerEngine.cs grava-o no destino).
 
-STATUS: NOT YET BUNDLED. This repository does not download or embed the binary — see
-plans/Phase_4.md ("A VALIDAR EMPIRICAMENTE ANTES DE FIXAR NO CÓDIGO") and
-scripts/deploy-dev.ps1, which looks for it under assets/upscale/ and warns (does not fail)
-when it is absent. UpscaleRunner (src/MantosExtract.Core/Upscale/UpscaleRunner.cs) degrades
-to UpscaleStatus.BinaryMissing and imports the un-upscaled original when the binary is
-missing — the product works without it, just without the 2x step.
+================================================================================
+1. Real-ESRGAN — modelos pré-treinados (.bin/.param)
+================================================================================
+Usado para: upscale local 2x dos elementos extraídos (M5/M8).
+Arquivos: upscale/models/realesrgan-x4plus-anime.{bin,param}
+          upscale/models/realesr-animevideov3-x2.{bin,param}
+Projeto: https://github.com/xinntao/Real-ESRGAN
+Licença: BSD-3-Clause (o repositório não estabelece termos separados para os pesos, nem
+         restrição de uso comercial para estes modelos).
 
-Before shipping to a client: download the official release, verify its checksum, place it
-(plus its .param/.bin model files) under assets/upscale/, and re-run scripts/deploy-dev.ps1.
+BSD 3-Clause License
 
---------------------------------------------------------------------------------
-Microsoft.Web.WebView2 (NuGet)
---------------------------------------------------------------------------------
-License: MIT. https://www.nuget.org/packages/Microsoft.Web.WebView2
+Copyright (c) 2021, Xintao Wang
+All rights reserved.
 
---------------------------------------------------------------------------------
-System.Text.Json (NuGet)
---------------------------------------------------------------------------------
-License: MIT. https://www.nuget.org/packages/System.Text.Json
+Redistribution and use in source and binary forms, with or without modification, are
+permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of
+   conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of
+   conditions and the following disclaimer in the documentation and/or other materials
+   provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors may be used
+   to endorse or promote products derived from this software without specific prior written
+   permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS
+OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+2. Real-ESRGAN-ncnn-vulkan — executável (realesrgan-ncnn-vulkan.exe)
+================================================================================
+Usado para: o processo externo que faz o upscale (invocado por UpscaleRunner).
+Arquivo: upscale/realesrgan-ncnn-vulkan.exe
+Projeto: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan
+Licença: MIT (dois avisos de copyright no LICENSE do projeto).
+Nota: este executável é derivado de realsr-ncnn-vulkan (nihui) e embute o ncnn (item 3).
+
+MIT License
+
+Copyright (c) 2021 Xintao Wang
+Copyright (c) 2019 nihui
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
+to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+================================================================================
+3. ncnn (Tencent) — embutido estaticamente no executável do item 2
+================================================================================
+Projeto: https://github.com/Tencent/ncnn
+Licença: BSD-3-Clause (Copyright (c) 2017 THL A29 Limited, a Tencent company, and
+         contributors). Componentes de terceiros dentro do ncnn usam zlib License
+         (rotinas matemáticas SIMD — Julien Pommier, Giovanni Garberoglio) e BSD-2-Clause
+         (SqueezeNet/Caffe — Forrest N. Iandola, The Regents of the University of
+         California). Todas permissivas; o texto BSD-3 é o do item 1, com o copyright da
+         Tencent.
+
+================================================================================
+4. Mesa 3D — lavapipe / llvmpipe (Vulkan por software): vulkan_lvp.dll
+================================================================================
+Usado para: permitir o upscale em máquinas SEM placa de vídeo compatível com Vulkan
+            (modo CPU — ver CLAUDE.md §Upscale). Invocado como driver do processo do item 2
+            via VK_DRIVER_FILES; não é carregado pelo nosso código.
+Arquivos: upscale/cpu-vulkan/vulkan_lvp.dll, upscale/cpu-vulkan/lvp_icd.x86_64.json
+Projeto: https://gitlab.freedesktop.org/mesa/mesa  (build Windows: pal1000/mesa-dist-win)
+Licença: MIT para o código do Mesa; partes do llvmpipe também sob Boost Software License
+         1.0. Contém avisos de copyright de vários colaboradores (Red Hat, Intel, AMD,
+         Valve, VMware e outros) — todos permissivos. Confirmado por mantenedor do Mesa
+         (mesa-dev, thread "Lavapipe license"): "You should only see the MIT license for
+         all Mesa contributions that don't import external source code."
+         O LLVM que o llvmpipe utiliza é Apache-2.0 WITH LLVM-exception — a exceção existe
+         justamente para permitir redistribuir o código objeto embarcado sem as obrigações
+         que o texto da Apache-2.0 imporia.
+
+================================================================================
+5. Microsoft C/C++ OpenMP Runtime — vcomp140.dll / vcomp140d.dll
+================================================================================
+Usado para: dependência de runtime do executável do item 2 (vem no release oficial dele —
+            confirmado na tabela de imports do .exe: ele importa VCOMP140.DLL).
+Arquivo: upscale/vcomp140.dll
+Licença: componente do Microsoft Visual C++ Redistributable, coberto pelos termos de
+         "Distributable Code" da licença do Visual Studio.
+
+Nota 1 — a vcomp140d.dll (variante de DEBUG, que vinha no ZIP oficial do Real-ESRGAN) foi
+REMOVIDA do pacote em 2026-09-12: as DLLs de debug da Microsoft não são redistribuíveis, e a
+tabela de imports do executável mostra que ela nunca era usada (verificado: só VCOMP140.DLL
+aparece; o upscale roda normalmente sem ela).
+
+Nota 2 — para a vcomp140.dll (release), a forma canônica de entregar o runtime é instalar o
+Visual C++ Redistributable em vez de copiar a DLL solta. Mantida como vem do release oficial
+upstream; é o único item desta lista cujo enquadramento depende dos termos do Visual Studio
+e não de uma licença open-source — vale uma conferência jurídica antes da venda, embora o
+risco prático seja baixo (é um runtime redistribuível da própria Microsoft).
+
+================================================================================
+6. Microsoft.Web.WebView2 (NuGet)
+================================================================================
+Usado para: a UI do addin e do instalador.
+Licença: termos da Microsoft para o WebView2 SDK (redistribuição permitida com o produto).
+https://www.nuget.org/packages/Microsoft.Web.WebView2
+
+================================================================================
+7. System.Text.Json / System.Memory / System.Buffers e demais pacotes .NET (NuGet)
+================================================================================
+Licença: MIT (Microsoft / .NET Foundation).
+
+================================================================================
+Ferramentas de build (NÃO distribuídas com o produto)
+================================================================================
+ILRepack.Lib.MSBuild.Task (Apache-2.0) e
+Microsoft.NETFramework.ReferenceAssemblies (MIT) são usados apenas na compilação; não
+acompanham o instalador.

@@ -21,7 +21,6 @@ Dentro do zip, copiar pra cá:
 ```
 assets/upscale/realesrgan-ncnn-vulkan.exe
 assets/upscale/vcomp140.dll
-assets/upscale/vcomp140d.dll
 assets/upscale/models/realesrgan-x4plus-anime.bin      <- modo GPU
 assets/upscale/models/realesrgan-x4plus-anime.param
 assets/upscale/models/realesr-animevideov3-x2.bin      <- modo CPU
@@ -31,6 +30,10 @@ assets/upscale/models/realesr-animevideov3-x2.param
 **Não copiar os outros modelos do zip** (`realesrgan-x4plus`, `realesrnet-x4plus`,
 `realesr-animevideov3-x3/x4`) — não são usados e só engordam o instalador à toa (o x4plus
 sozinho tem 33MB contra os 8,9MB do que usamos).
+
+**NÃO copiar a `vcomp140d.dll`**, que também vem no zip: é a variante de DEBUG do runtime da
+Microsoft, e DLLs de debug não são redistribuíveis. Ela nunca foi usada — a tabela de imports
+do executável só referencia `VCOMP140.DLL` (verificado; o upscale roda sem a de debug).
 
 ## Modo CPU (máquina sem placa de vídeo) — `cpu-vulkan/`
 
