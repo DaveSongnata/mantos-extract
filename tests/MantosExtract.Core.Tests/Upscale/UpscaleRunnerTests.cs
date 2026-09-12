@@ -28,7 +28,7 @@ namespace MantosExtract.Core.Tests.Upscale
                 @"C:\temp\in.png", @"C:\temp\out.png", @"C:\temp\models", "realesrgan-x4plus-anime", 4);
 
             Assert.Equal(
-                "-i C:\\temp\\in.png -o C:\\temp\\out.png -s 4 -m C:\\temp\\models -n realesrgan-x4plus-anime",
+                "-i C:\\temp\\in.png -o C:\\temp\\out.png -s 4 -m C:\\temp\\models -n realesrgan-x4plus-anime -v",
                 args);
         }
 
@@ -41,8 +41,28 @@ namespace MantosExtract.Core.Tests.Upscale
 
             Assert.Equal(
                 "-i \"C:\\Program Files\\in.png\" -o \"C:\\Program Files\\out.png\" -s 4 " +
-                "-m \"C:\\Program Files\\models\" -n realesrgan-x4plus-anime",
+                "-m \"C:\\Program Files\\models\" -n realesrgan-x4plus-anime -v",
                 args);
+        }
+
+        [Fact]
+        public void BuildArguments_EmitsTileOnlyWhenExplicit()
+        {
+            // O retry (GPU sem VRAM pro tile automático) é a ÚNICA coisa que muda entre as duas
+            // tentativas — se -t vazasse pra primeira, ela ficaria lenta à toa pra todo mundo.
+            string auto = UpscaleRunner.BuildArguments(@"C:\in.png", @"C:\out.png", @"C:\m", "modelo", 4);
+            string tiled = UpscaleRunner.BuildArguments(@"C:\in.png", @"C:\out.png", @"C:\m", "modelo", 4, 128);
+
+            Assert.DoesNotContain("-t", auto);
+            Assert.EndsWith("-t 128", tiled);
+        }
+
+        [Fact]
+        public void BuildArguments_AsksForVerbose_SoAFailureIsNeverSilent()
+        {
+            // Sem -v o binário falha com stderr VAZIO (medido em produção: "exit=-1 | (sem
+            // saida)") e não dá pra distinguir GPU de memória de modelo.
+            Assert.Contains("-v", UpscaleRunner.BuildArguments(@"C:\in.png", @"C:\out.png", @"C:\m", "modelo", 4));
         }
 
         [Fact]

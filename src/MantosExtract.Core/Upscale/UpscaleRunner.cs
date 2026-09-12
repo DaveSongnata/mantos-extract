@@ -75,22 +75,55 @@ namespace MantosExtract.Core.Upscale
             Directory.CreateDirectory(_paths.TempDir);
             string outputPath = Path.Combine(_paths.TempDir,
                 Path.GetFileNameWithoutExtension(inputPngPath) + "_native" + UpscalePaths.NativeScale + "x.png");
+
+            // Primeira tentativa: tile automático (o binário dimensiona pela VRAM que ele acha que
+            // tem). É o mais rápido quando dá certo.
+            UpscaleStatus status = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds, out string output);
+            if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
+
+            // Segunda tentativa, com tile pequeno e explícito. O tile automático é escolhido a
+            // partir da memória de vídeo REPORTADA, que numa VM ou GPU integrada não corresponde
+            // ao que dá pra alocar de verdade: o processo inicializa o Vulkan normalmente e só
+            // morre lá adiante, sem imprimir nada (exit=-1, ~3s — assinatura real da máquina do
+            // Dave, 2026-09-11). Tile menor = fatias menores na VRAM, mais lento porém viável.
+            // Só faz sentido depois de um Failed: num Timeout, insistir só gastaria o dobro.
+            if (status != UpscaleStatus.Failed)
+                return UpscaleResult.Of(status, DescribeFailure(DescribeAttempt(AutoTile), output));
+
+            UpscaleStatus retry = RunOnce(inputPngPath, outputPath, FallbackTile, timeoutSeconds, out string retryOutput);
+            if (retry == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
+
+            return UpscaleResult.Of(retry,
+                DescribeFailure(DescribeAttempt(AutoTile), output) +
+                " | 2a tentativa (-t " + FallbackTile + "): " + retryOutput);
+        }
+
+        /// <summary>Tile automático: o binário decide pelo que enxerga de VRAM.</summary>
+        private const int AutoTile = 0;
+
+        /// <summary>Tile do retry. 128 é conservador de propósito — o objetivo aqui é CABER numa
+        /// GPU modesta, não ser rápido; quem tem folga já terminou na primeira tentativa.</summary>
+        private const int FallbackTile = 128;
+
+        private UpscaleStatus RunOnce(string inputPngPath, string outputPath, int tileSize,
+                                      int timeoutSeconds, out string processOutput)
+        {
             if (File.Exists(outputPath)) File.Delete(outputPath);
 
-            string arguments = BuildArguments(
-                inputPngPath, outputPath, _paths.ModelsDir, UpscalePaths.ModelName, UpscalePaths.NativeScale);
+            string arguments = BuildArguments(inputPngPath, outputPath, _paths.ModelsDir,
+                UpscalePaths.ModelName, UpscalePaths.NativeScale, tileSize);
+
             // Roda COM O CWD na pasta do próprio binário. O Real-ESRGAN resolve o caminho do
             // modelo de forma peculiar (com um -m que ele não acha, a mensagem de erro sai com o
             // diretório do exe concatenado na frente do caminho absoluto), e dentro do CorelDRAW
             // o CWD herdado é o do host, não o nosso — fixar isso tira uma variável inteira da
             // equação em vez de torcer pro comportamento ser o mesmo nas duas máquinas.
-            UpscaleStatus status = RunProcess(
-                _paths.ExecutablePath, arguments, outputPath, timeoutSeconds, out string processOutput,
-                Path.GetDirectoryName(_paths.ExecutablePath));
-
-            if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
-            return UpscaleResult.Of(status, DescribeFailure(arguments, processOutput));
+            return RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds,
+                out processOutput, Path.GetDirectoryName(_paths.ExecutablePath));
         }
+
+        private string DescribeAttempt(int tileSize) => BuildArguments("<entrada>", "<saida>",
+            _paths.ModelsDir, UpscalePaths.ModelName, UpscalePaths.NativeScale, tileSize);
 
         /// <summary>Junta tudo que ajuda a explicar uma falha numa linha só de log: os argumentos
         /// reais, o que o processo imprimiu, e se os arquivos que ele precisa estão mesmo no
@@ -141,8 +174,20 @@ namespace MantosExtract.Core.Upscale
         /// <paramref name="scale"/>, which MUST be the model's native scale
         /// (<see cref="UpscalePaths.NativeScale"/>) — asking a native-4x model for <c>-s 2</c>
         /// returns a tile mosaic, not a 2x image.</summary>
-        public static string BuildArguments(string inputPath, string outputPath, string modelsDir, string modelName, int scale) =>
-            $"-i {Quote(inputPath)} -o {Quote(outputPath)} -s {scale} -m {Quote(modelsDir)} -n {Quote(modelName)}";
+        public static string BuildArguments(string inputPath, string outputPath, string modelsDir,
+                                            string modelName, int scale, int tileSize = 0)
+        {
+            // -v: o binário só fala quando é verboso. Sem isso, uma falha vem com stderr VAZIO e
+            // não há como saber se foi GPU, memória ou modelo (medido na máquina do Dave:
+            // "exit=-1 | (sem saida)"). Custa nada — o progresso é filtrado na captura, e nada é
+            // logado quando dá certo.
+            string args = $"-i {Quote(inputPath)} -o {Quote(outputPath)} -s {scale} " +
+                          $"-m {Quote(modelsDir)} -n {Quote(modelName)} -v";
+            // -t 0 é o default (automático) e o binário aceita, mas omitir deixa o comando mais
+            // honesto sobre o que está sendo pedido de diferente numa segunda tentativa.
+            if (tileSize > 0) args += $" -t {tileSize}";
+            return args;
+        }
 
         /// <summary>
         /// Generic external-process runner: start, wait up to <paramref name="timeoutSeconds"/>,
