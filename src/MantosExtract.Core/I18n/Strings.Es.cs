@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace MantosExtract.Core.I18n
 {
@@ -87,7 +87,6 @@ namespace MantosExtract.Core.I18n
             ["me.select.backgroundLabel"] = "Fondo",
 
             ["me.extract.progress.extracting"] = "extrayendo...",
-            ["me.extract.progress.upscaling"] = "mejorando resolución...",
             ["me.extract.progress.queued"] = "en espera",
             ["me.extract.progress.done"] = "listo",
             ["me.extract.progress.failed"] = "falló",
@@ -99,6 +98,17 @@ namespace MantosExtract.Core.I18n
             ["me.extract.result.title"] = "Elementos extraídos",
             ["me.extract.result.summary"] = "{0} de {1} elementos extraídos con éxito",
             ["me.extract.result.newImage"] = "Extraer otra imagen",
+
+            // Upscale opcional en la pantalla de resultado (Dave, 2026-09-11)
+            ["me.result.upscale.button"] = "Upscale",
+            ["me.result.upscale.title"] = "Duplicar la resolución de esta pieza (tarda unos segundos)",
+            ["me.result.upscale.running"] = "mejorando...",
+            ["me.result.upscale.done"] = "2x",
+            ["me.result.upscale.doneTitle"] = "Resolución duplicada",
+            ["me.result.upscale.errorFailed"] = "No pude mejorar la resolución de esta pieza.",
+            ["me.result.upscale.errorMissing"] = "El archivo de esta pieza ya no está disponible.",
+            ["me.result.upscale.errorUnavailable"] = "El upscale no está instalado en esta máquina.",
+            ["me.result.upscale.errorGone"] = "La pieza ya no está en el documento — el archivo en alta quedó guardado en la carpeta.",
 
             ["me.error.network.title"] = "No pudimos conectar",
             ["me.error.network.body"] = "Verifique su internet e intente de nuevo.",

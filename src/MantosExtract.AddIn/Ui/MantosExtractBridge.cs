@@ -53,7 +53,13 @@ namespace MantosExtract.AddIn.Ui
         private readonly AuthOrchestrator _auth;
         private readonly IDetectionClient _detectionClient = new DetectionClient();
         private readonly IExtractionClient _extractionClient = new ExtractionClient();
-        private readonly UpscaleRunner _upscaleRunner = new UpscaleRunner(UpscalePaths.Resolve());
+        private readonly UpscalePaths _upscalePaths = UpscalePaths.Resolve();
+        private readonly UpscaleRunner _upscaleRunner;
+
+        // PNG final de cada elemento extraído neste lote, por id — o upscale opcional (Dave,
+        // 2026-09-11) roda em cima DESTE arquivo bem depois da extração, quando/se o operador
+        // clicar no botão da tela de resultado.
+        private readonly Dictionary<string, string> _extractedFiles = new();
 
         // Per-docker-session state for the current detect→extract cycle. The bridge is the ONE
         // place that remembers "what did we detect" — the page only ever echoes back which ids
@@ -72,6 +78,7 @@ namespace MantosExtract.AddIn.Ui
             _i18n = i18n ?? new LocalizationService();
             _reloadForLanguage = reloadForLanguage;
             _auth = new AuthOrchestrator(_authClient, _credentials);
+            _upscaleRunner = new UpscaleRunner(_upscalePaths);
             _core.WebMessageReceived += OnWebMessage;
         }
 
@@ -161,6 +168,12 @@ namespace MantosExtract.AddIn.Ui
                     case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, ct)); break;
                     case "cancel": _runningCts?.Cancel(); break;
                     case "cancelElement": CancelElement(elementId); break;
+
+                    // Task.Run porque UpscaleElement é síncrono e demorado (processo externo com
+                    // WaitForExit, ~8s): rodar direto aqui travaria a thread de eventos do Corel.
+                    // Passa pelo RunAsync de propósito — o guard de "ocupado" é o que impede dois
+                    // upscales ao mesmo tempo mexendo no documento.
+                    case "upscaleElement": { string upId = elementId; RunAsync(ct => Task.Run(() => UpscaleElement(upId), ct)); break; }
 
                     default: MantosExtractLog.Write("OnWebMessage: comando desconhecido '" + cmd + "'"); break;
                 }
@@ -422,6 +435,8 @@ namespace MantosExtract.AddIn.Ui
             // que já existia — `confirmed`/`confirmedIds` nunca inclui o ID sentinela, então esse
             // fluxo roda IDÊNTICO a antes quando "Fundo" não está marcado.
             List<DetectedElement> confirmed = ResolveConfirmedElements(elementIds);
+            // Lote novo: o upscale opcional só pode agir sobre o que ESTE lote produziu.
+            _extractedFiles.Clear();
             string extractionQuality = ExtractionQualityStore.Read();
             var placedThisBatch = new List<PlacedSlot>();
             var usedNames = new Dictionary<string, int>();
@@ -482,32 +497,20 @@ namespace MantosExtract.AddIn.Ui
                                        element.Box, element.Label, elementCts.Token)
                         .ConfigureAwait(false);
 
-                    string rawPath = Path.Combine(batchDir, safeName + ".tmp.png");
-                    File.WriteAllBytes(rawPath, extracted.Bytes);
-
-                    Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "upscaling" });
-                    string upscaledPath = ApplyUpscale(rawPath, element.Id);
-
-                    // UpscaleRunner/UpscalePaths stay generic (own fixed temp dir, no notion of
-                    // "batch") — land whatever they produced inside batchDir under the final
-                    // name, so the folder ends up with exactly one PNG per element.
+                    // Sem upscale aqui (Dave, 2026-09-11): a extração entrega DIRETO, e o upscale
+                    // virou um botão por linha na tela de resultado. Numa RTX 3050 o upscale é
+                    // ~8s por peça — esperar isso vezes N elementos antes de ver qualquer
+                    // resultado na página era o pior lugar possível pra gastar esse tempo.
                     string finalPath = Path.Combine(batchDir, safeName + ".png");
-                    if (string.Equals(upscaledPath, rawPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        File.Move(rawPath, finalPath);
-                    }
-                    else
-                    {
-                        File.Copy(upscaledPath, finalPath, overwrite: true);
-                        TryDelete(rawPath);
-                        TryDelete(upscaledPath);
-                    }
+                    File.WriteAllBytes(finalPath, extracted.Bytes);
 
                     var (leftMm, bottomMm, widthMm, heightMm) = _corel.ImportPng(finalPath);
                     var (slotLeft, slotBottom) = ElementLayout.NextSlot(
                         pageBounds.WidthMm, pageBounds.HeightMm, widthMm, heightMm, placedThisBatch);
                     _corel.MoveLastImportedShape(slotLeft, slotBottom);
                     _corel.RenameLastImportedShape(safeName);
+                    _corel.TrackLastImportedShape(element.Id);
+                    _extractedFiles[element.Id] = finalPath;
                     placedThisBatch.Add(new PlacedSlot(widthMm, heightMm));
 
                     succeeded++;
@@ -583,7 +586,10 @@ namespace MantosExtract.AddIn.Ui
             try { File.WriteAllText(Path.Combine(batchDir, "batch.json"), manifest.ToJson()); }
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
-            Post(new { type = "extract", done = true, succeeded, failed });
+            // canUpscale: a tela de resultado só oferece o botão de upscale se o binário existe
+            // MESMO nesta máquina — sem ele o clique não teria o que fazer (UpscaleStatus
+            // .BinaryMissing), e um botão que nunca funciona é pior que botão nenhum.
+            Post(new { type = "extract", done = true, succeeded, failed, canUpscale = _upscalePaths.ExecutableExists });
         }
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela
@@ -618,29 +624,17 @@ namespace MantosExtract.AddIn.Ui
                                    _lastExportedImageBytes!, _lastExportedMimeType, bgCts.Token)
                     .ConfigureAwait(false);
 
-                string rawPath = Path.Combine(batchDir, safeName + ".tmp.png");
-                File.WriteAllBytes(rawPath, extracted.Bytes);
-
-                Post(new { type = "extractProgress", id = BackgroundElementId, stage = "upscaling" });
-                string upscaledPath = ApplyUpscale(rawPath, BackgroundElementId);
-
+                // Igual ao loop de elementos: entrega direto, upscale só sob demanda depois.
                 string finalPath = Path.Combine(batchDir, safeName + ".png");
-                if (string.Equals(upscaledPath, rawPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    File.Move(rawPath, finalPath);
-                }
-                else
-                {
-                    File.Copy(upscaledPath, finalPath, overwrite: true);
-                    TryDelete(rawPath);
-                    TryDelete(upscaledPath);
-                }
+                File.WriteAllBytes(finalPath, extracted.Bytes);
 
                 var (leftMm, bottomMm, widthMm, heightMm) = _corel.ImportPng(finalPath);
                 var (slotLeft, slotBottom) = ElementLayout.NextSlot(
                     pageBounds.WidthMm, pageBounds.HeightMm, widthMm, heightMm, placedThisBatch);
                 _corel.MoveLastImportedShape(slotLeft, slotBottom);
                 _corel.RenameLastImportedShape(safeName);
+                _corel.TrackLastImportedShape(BackgroundElementId);
+                _extractedFiles[BackgroundElementId] = finalPath;
                 placedThisBatch.Add(new PlacedSlot(widthMm, heightMm));
 
                 onSucceeded();
@@ -705,24 +699,84 @@ namespace MantosExtract.AddIn.Ui
             catch { /* best-effort cleanup, never worth failing a completed extraction over */ }
         }
 
-        /// <summary>Runs the upscale step and degrades gracefully (M5 / plans/Phase_4.md): any
-        /// non-success status returns the ORIGINAL extracted PNG unchanged rather than blocking
-        /// the element.</summary>
-        private string ApplyUpscale(string extractedPngPath, string elementId)
+        /// <summary>
+        /// Upscale OPCIONAL de UM elemento já extraído (Dave, 2026-09-11), disparado pelo botão
+        /// da tela de resultado. Roda o Real-ESRGAN na escala nativa do modelo (4×), reduz pela
+        /// metade pro 2× que o produto entrega (M8) e troca a peça já posicionada no Corel pela
+        /// versão em alta — mesma posição, mesmo tamanho físico.
+        ///
+        /// Falhar aqui NUNCA é destrutivo: o arquivo original só é sobrescrito depois que a
+        /// versão nova está pronta e encaixada, então qualquer erro no meio deixa o operador
+        /// exatamente com o que ele já tinha.
+        /// </summary>
+        private void UpscaleElement(string id)
         {
-            UpscaleResult upscale = _upscaleRunner.Run(extractedPngPath);
-            switch (upscale.Status)
+            if (string.IsNullOrEmpty(id)) return;
+
+            if (!_extractedFiles.TryGetValue(id, out string? finalPath) || !File.Exists(finalPath))
             {
-                case UpscaleStatus.Success:
-                    return upscale.OutputPath!;
-                case UpscaleStatus.BinaryMissing:
-                    MantosExtractLog.Write("Upscale SKIPPED (binário ausente) for " + elementId);
-                    return extractedPngPath;
-                default:
-                    MantosExtractLog.Write("Upscale " + upscale.Status + " for " + elementId + " — usando original");
-                    return extractedPngPath;
+                MantosExtractLog.Write("Upscale: arquivo do elemento " + id + " não está mais disponível");
+                PostUpscaleFailed(id, L("me.result.upscale.errorMissing"));
+                return;
+            }
+
+            Post(new { type = "upscaleProgress", id, stage = "running" });
+
+            UpscaleResult upscale = _upscaleRunner.Run(finalPath, timeoutSeconds: 300);
+            if (upscale.Status != UpscaleStatus.Success)
+            {
+                MantosExtractLog.Write("Upscale " + upscale.Status + " for " + id);
+                PostUpscaleFailed(id, upscale.Status == UpscaleStatus.BinaryMissing
+                    ? L("me.result.upscale.errorUnavailable")
+                    : L("me.result.upscale.errorFailed"));
+                return;
+            }
+
+            // 4× nativo -> 2× final (M8). O arquivo nativo é descartado logo em seguida: ele é
+            // 4× a área do que o produto entrega e não serve pra mais nada.
+            string nativePath = upscale.OutputPath!;
+            string halvedPath = Path.Combine(Path.GetDirectoryName(nativePath)!,
+                Path.GetFileNameWithoutExtension(nativePath) + "_half.png");
+
+            bool halved = ImageDownscaler.TryHalve(nativePath, halvedPath);
+            if (!halved)
+            {
+                MantosExtractLog.Write("Upscale: downscale 4x->2x falhou for " + id);
+                TryDelete(nativePath);
+                PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
+                return;
+            }
+
+            try
+            {
+                if (!_corel.ReplaceTrackedShape(id, halvedPath))
+                {
+                    // A peça não está mais na página (o operador apagou). O arquivo em alta
+                    // continua salvo na pasta do lote — só não há o que substituir no canvas.
+                    MantosExtractLog.Write("Upscale: shape de " + id + " não está mais no documento");
+                    File.Copy(halvedPath, finalPath, overwrite: true);
+                    PostUpscaleFailed(id, L("me.result.upscale.errorGone"));
+                    return;
+                }
+
+                _corel.RenameLastImportedShape(Path.GetFileNameWithoutExtension(finalPath));
+                File.Copy(halvedPath, finalPath, overwrite: true);
+                Post(new { type = "upscaleProgress", id, stage = "done", ok = true });
+            }
+            catch (Exception ex)
+            {
+                MantosExtractLog.Write("Upscale import FAILED for " + id + ": " + ex);
+                PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
+            }
+            finally
+            {
+                TryDelete(nativePath);
+                TryDelete(halvedPath);
             }
         }
+
+        private void PostUpscaleFailed(string id, string error) =>
+            Post(new { type = "upscaleProgress", id, stage = "done", ok = false, error });
 
         private List<DetectedElement> ResolveConfirmedElements(string[] ids)
         {

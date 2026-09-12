@@ -7,7 +7,9 @@ namespace MantosExtract.Core.Upscale
 {
     public enum UpscaleStatus
     {
-        /// <summary>2x output produced and sanity-checked (file exists, larger than the input).</summary>
+        /// <summary>Output produced and sanity-checked (file exists). Note this is the model's
+        /// NATIVE scale (4x), not the 2x the product ships — halving happens downstream
+        /// (ApplyUpscale), because only the native scale tiles correctly.</summary>
         Success,
         /// <summary>realesrgan-ncnn-vulkan.exe is not installed on this machine — packaging step
         /// pending (plans/Phase_4.md); the caller degrades to the un-upscaled original.</summary>
@@ -49,33 +51,38 @@ namespace MantosExtract.Core.Upscale
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         }
 
-        /// <summary>Upscales <paramref name="inputPngPath"/> 2x. Never throws for an expected
-        /// failure mode (missing binary, timeout, bad exit) — those are all just a
-        /// <see cref="UpscaleStatus"/> the caller degrades on (Fase 4: import the original PNG
-        /// instead of blocking the whole element).</summary>
+        /// <summary>Upscales <paramref name="inputPngPath"/> at the model's native scale (4x).
+        /// The caller halves it to the 2x the product actually ships (M8) — see ApplyUpscale.
+        /// Never throws for an expected failure mode (missing binary, timeout, bad exit) — those
+        /// are all just a <see cref="UpscaleStatus"/> the caller degrades on (Fase 4: import the
+        /// original PNG instead of blocking the whole element).</summary>
         public UpscaleResult Run(string inputPngPath, int timeoutSeconds = 90)
         {
             if (!_paths.ExecutableExists) return UpscaleResult.Of(UpscaleStatus.BinaryMissing);
 
             Directory.CreateDirectory(_paths.TempDir);
             string outputPath = Path.Combine(_paths.TempDir,
-                Path.GetFileNameWithoutExtension(inputPngPath) + "_2x.png");
+                Path.GetFileNameWithoutExtension(inputPngPath) + "_native" + UpscalePaths.NativeScale + "x.png");
             if (File.Exists(outputPath)) File.Delete(outputPath);
 
-            string arguments = BuildArguments(inputPngPath, outputPath, _paths.ModelsDir, UpscalePaths.ModelName);
+            string arguments = BuildArguments(
+                inputPngPath, outputPath, _paths.ModelsDir, UpscalePaths.ModelName, UpscalePaths.NativeScale);
             UpscaleStatus status = RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds);
             return status == UpscaleStatus.Success ? UpscaleResult.Ok(outputPath) : UpscaleResult.Of(status);
         }
 
         /// <summary>Pure — the exact CLI shape realesrgan-ncnn-vulkan.exe expects (-i in, -o
         /// out, -s scale, -m models dir, -n model name). Kept separate from process invocation so
-        /// it is unit-testable without spawning anything. <c>-m</c>/<c>-n</c> are NOT optional in
-        /// practice: without them the binary silently falls back to its own default model
-        /// (<c>realesr-animevideov3</c>, tuned for anime video), which is the wrong model for
-        /// garment artwork — confirmed 2026-09-11 with a real invocation against a real extracted
-        /// background (1254x1254 → 2508x2508 with <c>realesrgan-x4plus</c>).</summary>
-        public static string BuildArguments(string inputPath, string outputPath, string modelsDir, string modelName) =>
-            $"-i {Quote(inputPath)} -o {Quote(outputPath)} -s 2 -m {Quote(modelsDir)} -n {Quote(modelName)}";
+        /// it is unit-testable without spawning anything.
+        ///
+        /// Two flags that look optional and are NOT (both learned the hard way, 2026-09-11):
+        /// <c>-m</c>/<c>-n</c>, because without them the binary silently uses its own default
+        /// model (<c>realesr-animevideov3</c>), which zeroes the alpha channel; and
+        /// <paramref name="scale"/>, which MUST be the model's native scale
+        /// (<see cref="UpscalePaths.NativeScale"/>) — asking a native-4x model for <c>-s 2</c>
+        /// returns a tile mosaic, not a 2x image.</summary>
+        public static string BuildArguments(string inputPath, string outputPath, string modelsDir, string modelName, int scale) =>
+            $"-i {Quote(inputPath)} -o {Quote(outputPath)} -s {scale} -m {Quote(modelsDir)} -n {Quote(modelName)}";
 
         /// <summary>
         /// Generic external-process runner: start, wait up to <paramref name="timeoutSeconds"/>,

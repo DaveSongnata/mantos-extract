@@ -35,6 +35,18 @@ namespace MantosExtract.Interop
         /// it ever reaches here (docs/mantos-extract-spec.md §6, "José &amp; Cia" case).</summary>
         void RenameLastImportedShape(string safeName);
 
+        /// <summary>Remembers the shape just imported under <paramref name="key"/>, so a later
+        /// optional upscale (Dave, 2026-09-11) can swap THAT specific shape rather than whatever
+        /// happens to be selected when the operator clicks the button.</summary>
+        void TrackLastImportedShape(string key);
+
+        /// <summary>Swaps the shape remembered under <paramref name="key"/> for
+        /// <paramref name="pngPath"/>, keeping the original's position AND physical size — an
+        /// upscale adds pixels, it must not resize the artwork on the page. Returns false when
+        /// the original is gone (operator deleted it by hand), so the caller can say so instead
+        /// of silently dropping a second copy on the canvas.</summary>
+        bool ReplaceTrackedShape(string key, string pngPath);
+
         /// <summary>Active page bounding box in millimetres, used to place the first imported
         /// element sensibly when there is no prior element to lay out next to.</summary>
         (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ActivePageBoundsMm();

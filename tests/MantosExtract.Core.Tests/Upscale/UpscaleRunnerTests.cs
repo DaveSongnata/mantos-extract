@@ -25,21 +25,57 @@ namespace MantosExtract.Core.Tests.Upscale
         public void BuildArguments_ProducesExpectedCliShape()
         {
             string args = UpscaleRunner.BuildArguments(
-                @"C:\temp\in.png", @"C:\temp\out.png", @"C:\temp\models", "realesrgan-x4plus");
+                @"C:\temp\in.png", @"C:\temp\out.png", @"C:\temp\models", "realesrgan-x4plus-anime", 4);
 
-            Assert.Equal("-i C:\\temp\\in.png -o C:\\temp\\out.png -s 2 -m C:\\temp\\models -n realesrgan-x4plus", args);
+            Assert.Equal(
+                "-i C:\\temp\\in.png -o C:\\temp\\out.png -s 4 -m C:\\temp\\models -n realesrgan-x4plus-anime",
+                args);
         }
 
         [Fact]
         public void BuildArguments_QuotesPathsWithSpaces()
         {
             string args = UpscaleRunner.BuildArguments(
-                @"C:\Program Files\in.png", @"C:\Program Files\out.png", @"C:\Program Files\models", "realesrgan-x4plus");
+                @"C:\Program Files\in.png", @"C:\Program Files\out.png", @"C:\Program Files\models",
+                "realesrgan-x4plus-anime", 4);
 
             Assert.Equal(
-                "-i \"C:\\Program Files\\in.png\" -o \"C:\\Program Files\\out.png\" -s 2 " +
-                "-m \"C:\\Program Files\\models\" -n realesrgan-x4plus",
+                "-i \"C:\\Program Files\\in.png\" -o \"C:\\Program Files\\out.png\" -s 4 " +
+                "-m \"C:\\Program Files\\models\" -n realesrgan-x4plus-anime",
                 args);
+        }
+
+        [Fact]
+        public void BuildArguments_UsesTheModelsNativeScale_NeverAHardcodedTwo()
+        {
+            // Regressão (2026-09-11): pedir -s 2 de um modelo nativo 4x devolve um MOSAICO de
+            // tiles desencontrados, não um 2x. O 2x do produto (M8) vem do downscale posterior,
+            // nunca desta flag — se alguém "consertar" isso pra 2 de novo, o upscale volta a sair
+            // quebrado e só dá pra ver olhando a imagem.
+            string args = UpscaleRunner.BuildArguments(
+                @"C:\in.png", @"C:\out.png", @"C:\models", UpscalePaths.ModelName, UpscalePaths.NativeScale);
+
+            Assert.Contains("-s 4", args);
+            Assert.DoesNotContain("-s 2", args);
+            Assert.Equal(4, UpscalePaths.NativeScale);
+        }
+
+        [Fact]
+        public void ModelName_IsTheAlphaSafeOne_NeverTheBinarysDefault()
+        {
+            // realesr-animevideov3 é o default do binário e o mais rápido, mas ZERA o canal alpha
+            // (testado: alphaMax=0 num PNG transparente) — todo elemento extraído é PNG com
+            // transparência (M6), então ele sairia invisível no Corel.
+            Assert.Equal("realesrgan-x4plus-anime", UpscalePaths.ModelName);
+            Assert.DoesNotContain("animevideov3", UpscalePaths.ModelName);
+        }
+
+        [Fact]
+        public void ModelsDir_SitsNextToTheExecutable()
+        {
+            var paths = new UpscalePaths(@"C:\Program Files\MantosExtract\upscale\realesrgan-ncnn-vulkan.exe");
+
+            Assert.Equal(@"C:\Program Files\MantosExtract\upscale\models", paths.ModelsDir);
         }
 
         [Fact]

@@ -78,6 +78,14 @@
     <EmbeddedResource Include="@(_UpscalePayload)">
       <LogicalName>addon.upscale/%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- models/ PRECISA de um item próprio: o glob acima não é recursivo, e sem esta linha o
+         instalador embutia o .exe do Real-ESRGAN SEM nenhum modelo (bug real — os instaladores
+         0.5.1/0.5.2 saíram exatamente com o mesmo tamanho de antes de "empacotar" o upscale,
+         que foi o que denunciou). Sem modelo o binário não roda: é ele que faz o trabalho. -->
+    <_UpscaleModels Include="../dist/payload/upscale/models/*" />
+    <EmbeddedResource Include="@(_UpscaleModels)">
+      <LogicalName>addon.upscale/models/%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- Licence attribution travels WITH the binaries, not only in the repo. -->

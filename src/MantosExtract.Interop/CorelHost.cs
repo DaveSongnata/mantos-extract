@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace MantosExtract.Interop
 {
@@ -13,6 +14,12 @@ namespace MantosExtract.Interop
     {
         private readonly dynamic _app; // Corel.Interop.VGCore.Application (late-bound)
         private dynamic? _lastImportedShape;
+
+        // Shapes desta sessão, por id de elemento — só pro upscale opcional (ver
+        // TrackLastImportedShape). Guardar a referência COM direto (em vez de procurar por nome
+        // na hora) é o que garante que o upscale troque EXATAMENTE a peça que aquela linha da
+        // tela de resultado representa, mesmo que o operador tenha renomeado ou movido ela.
+        private readonly Dictionary<string, object> _trackedShapes = new Dictionary<string, object>();
 
         public CorelHost(dynamic corelApplication)
         {
@@ -94,6 +101,62 @@ namespace MantosExtract.Interop
             if (_lastImportedShape == null) return;
             try { _lastImportedShape.Name = safeName; }
             catch { /* cosmetic only — a rename failure must never break the import */ }
+        }
+
+        public void TrackLastImportedShape(string key)
+        {
+            if (_lastImportedShape == null || string.IsNullOrEmpty(key)) return;
+            // `!`: o null-check acima já garante, mas a análise de fluxo não atravessa `dynamic?`.
+            _trackedShapes[key] = (object)_lastImportedShape!;
+        }
+
+        public bool ReplaceTrackedShape(string key, string pngPath)
+        {
+            if (!_trackedShapes.TryGetValue(key, out object? tracked) || tracked == null) return false;
+
+            using var _ = new CorelDocumentState(_app);
+
+            // Lê a geometria do antigo ANTES de importar qualquer coisa: se ele foi apagado à mão
+            // pelo operador, isso lança e a gente sai SEM ter jogado uma segunda cópia na página.
+            double leftMm, bottomMm, widthMm, heightMm;
+            try
+            {
+                dynamic old = tracked;
+                leftMm = (double)old.LeftX;
+                bottomMm = (double)old.BottomY;
+                widthMm = (double)old.SizeWidth;
+                heightMm = (double)old.SizeHeight;
+            }
+            catch
+            {
+                _trackedShapes.Remove(key);
+                return false;
+            }
+
+            dynamic imported = CorelImporter.Import(_app, _app.ActiveDocument, pngPath);
+            _lastImportedShape = imported;
+
+            // Tamanho primeiro, posição depois: mexer no tamanho reposiciona a âncora no Corel, e
+            // o que importa é o resultado final ficar EXATAMENTE na caixa do antigo — upscale
+            // muda a densidade de pixels, nunca o tamanho físico da peça na página.
+            try
+            {
+                imported.SizeWidth = widthMm;
+                imported.SizeHeight = heightMm;
+                imported.LeftX = leftMm;
+                imported.BottomY = bottomMm;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "A versão em alta resolução entrou, mas não consegui encaixá-la no lugar da anterior: " + ex.Message, ex);
+            }
+
+            try { ((dynamic)tracked).Delete(); }
+            catch { /* a nova já está no lugar certo; uma sobra invisível não justifica falhar */ }
+
+            _trackedShapes[key] = (object)imported;
+            return true;
         }
 
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ActivePageBoundsMm()

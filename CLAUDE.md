@@ -97,17 +97,35 @@ Real-ESRGAN NCNN-Vulkan (binário standalone, sem Python), invocado como **proce
 pelo shim, no MESMO padrão do `SisCut.Engine/EngineRunner.cs` (grava arquivo de entrada →
 `Process.Start` com timeout duro → mapeia exit code → lê arquivo de saída). Fator fixo 2×.
 
-**Correção 2026-09-11 (testado de verdade, não documentação copiada):** este binário
-**NÃO tem fallback real pra CPU** — `-g -1` devolve `invalid gpu device` (exit 255) nesta
-build (v0.2.5.0); ele exige um device Vulkan de verdade (integrada OU dedicada). Isso não
-quebra nada porque `UpscaleRunner.Run`/`ApplyUpscale` já tratam QUALQUER exit não-zero do
-binário (GPU ausente incluso) como degradação — devolve a imagem original sem upscale,
-nunca bloqueia nem trava. Só numa máquina sem NENHUM device Vulkan (raro, mas possível em
-VM sem GPU passthrough) o upscale ficaria sempre desligado, silenciosamente. Tempos reais
-medidos (imagem 1254×1254 → 2508×2508, nesta VM de dev): automático (escolhe sozinho)
-19,7s — escolheu a NVIDIA dedicada; forçando só a Intel Iris Xe (integrada) 83,6s; forçando
-só a NVIDIA RTX 3050 (dedicada) 18,0s. Numa máquina só com integrada, esperar algo na faixa
-de ~80s+ por elemento.
+**OPCIONAL, nunca no caminho da extração (Dave, 2026-09-11).** A extração entrega direto e cada
+peça pronta ganha um botão "Upscale" na tela de resultado — o operador decide, peça por peça.
+Motivo: o upscale custa ~8s POR peça, e gastar isso vezes N antes de mostrar qualquer resultado
+era o pior lugar possível pra esse tempo. Clicar substitui a peça já posicionada no Corel pela
+versão em alta (`ICorelHost.TrackLastImportedShape`/`ReplaceTrackedShape` — mesma posição, mesmo
+tamanho FÍSICO em mm; upscale muda densidade de pixel, não tamanho na página).
+
+**Três regras não-óbvias, todas descobertas testando de verdade (2026-09-11), todas cobertas por
+teste em `UpscaleRunnerTests`:**
+1. **`-s` tem que ser a escala NATIVA do modelo.** Pedir `-s 2` de um modelo nativo 4× NÃO dá um
+   2×: o binário monta os tiles em posições calculadas pra 2× enquanto a rede devolve tiles 4×, e
+   a imagem sai num MOSAICO de blocos desencontrados. O 2× do produto (M8) vem de rodar `-s 4` e
+   reduzir pela metade depois (`MantosExtract.Windows.ImageDownscaler`) — o que ainda é melhor que
+   um 2× direto, porque supersampling suaviza os artefatos da própria rede.
+2. **O modelo é `realesrgan-x4plus-anime`, e o nome engana.** "anime" aqui significa "treinado em
+   arte ilustrada: borda dura, cor chapada" — exatamente o que estampa/logo/escudo de camisa é.
+   Contra o `realesrgan-x4plus` (treinado em foto real) devolveu bordas mais limpas, sendo 2,7×
+   mais rápido (7,8s vs 20,9s numa RTX 3050) e com modelo 3,7× menor (8,9MB vs 33MB).
+3. **`-m`/`-n` nunca são opcionais.** Sem eles o binário usa o default dele
+   (`realesr-animevideov3`) que é o mais rápido de todos (2,6s) mas **ZERA o canal alpha** —
+   todo elemento extraído é PNG transparente (M6), então sairia invisível no Corel.
+
+**Não tem fallback real pra CPU** — `-g -1` devolve `invalid gpu device` (exit 255) nesta build
+(v0.2.5.0); exige um device Vulkan de verdade (integrada OU dedicada). Não quebra nada:
+`UpscaleRunner.Run`/`UpscaleElement` tratam qualquer exit não-zero como degradação (a peça
+original continua no lugar, nada trava), e a tela de resultado nem mostra o botão quando o
+binário não existe (`canUpscale`). Tempos reais nesta VM de dev, imagem 1254×1254 → 2508×2508:
+NVIDIA RTX 3050 dedicada ~8s; Intel Iris Xe integrada bem mais lento (~80s+ no modelo antigo).
+
 
 **Nota de arquitetura (decisão técnica, ver CHANGELOG):** o spec original citava a
 `PONTE-DE-ACAO.md` do SisCut como precedente — mas aquele protocolo é para um app PAR externo

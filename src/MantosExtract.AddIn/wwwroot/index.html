@@ -373,6 +373,28 @@
   .dtable tr.failed .stage{color:var(--accent-dark);}
   .dtable .mark{width:16px;height:16px;display:inline-block;vertical-align:-3px;}
   .result-summary{font-size:12px;text-align:center;font-weight:700;}
+  /* Upscale opcional (Dave, 2026-09-11): o rótulo de "já está em alta" é marcado por PESO e
+     borda, não por uma cor nova — a paleta continua com uma cor de ação só (CLAUDE.md). */
+  .upscale-done{
+    font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;
+    border:1.5px solid var(--ink);padding:2px 5px;white-space:nowrap;
+  }
+  /* Status à esquerda, ação à direita. O flex fica num DIV dentro da célula, nunca no <td>:
+     `display:flex` num <td> o tira do layout de tabela e desalinha as colunas todas. */
+  .result-stage{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .result-stage > .result-stage-label{white-space:nowrap;}
+  .dtable .btn-sm{padding:4px 7px;font-size:9.5px;flex:none;}
+  /* table-layout:fixed é o que impede a tabela de crescer além do painel (~320-360px) quando a
+     coluna de status ganha um botão: sem isso o conteúdo "empurra" a largura, a página inteira
+     passa a rolar na horizontal e o botão sai de vista. Nome comprido corta com reticências —
+     o operador reconhece a peça pelo começo do nome, e ela está nomeada igual no Corel. */
+  .dtable-result{table-layout:fixed;}
+  .dtable-result th:first-child,.dtable-result td:first-child{width:44%;}
+  .dtable-result td:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .inline-error{
+    font-size:11.5px;font-weight:700;color:var(--accent-dark);
+    border-left:var(--lw) solid var(--accent-dark);padding:6px 8px;background:var(--surface);
+  }
 
   /* ---- erro de rede (4.7) — screen 4.8 (créditos zero) retirada 2026-09-07 junto com o
      débito de crédito em si (M2 revogada): o servidor não devolve mais E_NO_CREDITS pra
@@ -546,8 +568,8 @@
     <!-- 4.6: resultado -->
     <section id="screen-result" hidden style="flex:1;display:flex;flex-direction:column;gap:10px;">
       <div class="bar"><span class="tab" aria-hidden="true"></span><span data-i18n="me.extract.result.title">Elementos extraídos</span></div>
-      <div style="overflow-x:auto;">
-        <table class="dtable">
+      <div>
+        <table class="dtable dtable-result">
           <thead><tr>
             <th data-i18n="me.table.element">Elemento</th>
             <th data-i18n="me.table.status">Status</th>
@@ -556,6 +578,7 @@
         </table>
       </div>
       <div class="result-summary" id="resultSummary"></div>
+      <div class="inline-error" id="resultUpscaleError" hidden></div>
       <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
       <button type="button" id="resultNewImageBtn" class="primary" data-i18n="me.extract.result.newImage">Extrair outra imagem</button>
     </section>
@@ -786,6 +809,8 @@
     confirmedIds: [],         // ids the operator checked on screen-select
     extractProgress: {},      // id -> {label, stage, ok}
     lastFailedIds: [],        // populated when an extract batch ends, for "tentar de novo"
+    canUpscale: false,        // binário do Real-ESRGAN presente nesta máquina (o C# informa)
+    upscale: {},              // id -> "idle"|"running"|"done" (upscale opcional, tela de resultado)
     lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
   };
@@ -893,6 +918,9 @@
         break;
       case "extract":
         onExtractDone(msg);
+        break;
+      case "upscaleProgress":
+        onUpscaleProgress(msg);
         break;
       case "busy":
         break;
@@ -1136,22 +1164,110 @@
     renderStageCell(stateCell, msg.stage, msg.ok, msg.id, msg.code);
   }
 
+  // Upscale opcional (Dave, 2026-09-11): a extração entrega DIRETO, sem esperar upscale, e cada
+  // peça pronta ganha um botão pra dobrar a resolução SE o operador quiser. Estado por linha,
+  // porque cada peça é upscalada individualmente: "idle" (botão), "running" (kicker deslizante,
+  // mesmo idioma visual das outras telas), "done" (rótulo), "failed" (erro + botão de novo).
+  function renderResultStatusCell(cell, id, p){
+    cell.innerHTML = "";
+    var box = document.createElement("div");
+    box.className = "result-stage";
+    cell.appendChild(box);
+
+    var up = (p.ok && state.canUpscale) ? (state.upscale[id] || "idle") : "idle";
+
+    var statusText = document.createElement("span");
+    statusText.className = "result-stage-label";
+    // Durante o upscale o rótulo VIRA "melhorando..." em vez de somar com "pronto": a coluna é
+    // estreita (painel ~340px) e as duas informações juntas estouravam a célula — e "pronto +
+    // melhorando" ao mesmo tempo lê mal de qualquer forma.
+    statusText.textContent = up === "running"
+      ? T("me.result.upscale.running")
+      : T(p.code === "E_CANCELLED" ? "me.extract.progress.cancelled"
+        : (p.ok ? "me.extract.progress.done" : "me.extract.progress.failed"));
+    box.appendChild(statusText);
+
+    if (!p.ok || !state.canUpscale) return;
+
+    var wrap = document.createElement("span");
+    wrap.className = "stage-inline";
+
+    if (up === "running") {
+      var track = document.createElement("span");
+      track.className = "kicker-track sm";
+      track.setAttribute("aria-hidden", "true");
+      var fill = document.createElement("span");
+      fill.className = "kicker-fill";
+      track.appendChild(fill);
+      wrap.appendChild(track);
+    } else if (up === "done") {
+      // "2×" em vez de "alta resolução" por escrito: cabe na coluna e é o número exato do que
+      // aconteceu — número como peça gráfica é o idioma do design system (CLAUDE.md).
+      var okLabel = document.createElement("span");
+      okLabel.className = "upscale-done";
+      okLabel.textContent = T("me.result.upscale.done");
+      okLabel.title = T("me.result.upscale.doneTitle");
+      wrap.appendChild(okLabel);
+    } else {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-sm";
+      btn.textContent = T("me.result.upscale.button");
+      btn.title = T("me.result.upscale.title");
+      btn.addEventListener("click", function(){
+        state.upscale[id] = "running";
+        renderResultStatusCell(cell, id, p);
+        send({cmd:"upscaleElement", id: id});
+      });
+      wrap.appendChild(btn);
+    }
+    box.appendChild(wrap);
+  }
+
+  function onUpscaleProgress(msg){
+    var p = state.extractProgress[msg.id];
+    if (!p) return;
+    if (msg.stage === "running") state.upscale[msg.id] = "running";
+    else state.upscale[msg.id] = msg.ok ? "done" : "idle";
+
+    var cell = document.querySelector('#result-' + cssEscapeId(msg.id) + ' .stage');
+    if (cell) renderResultStatusCell(cell, msg.id, p);
+
+    var errBox = $("resultUpscaleError");
+    if (msg.stage === "done" && !msg.ok && msg.error) {
+      errBox.textContent = msg.error;
+      errBox.hidden = false;
+    } else if (msg.stage === "done" && msg.ok) {
+      errBox.hidden = true;
+    }
+  }
+
+  // Os ids vêm do servidor de detecção ("el-1", "__background__"), então na prática já são
+  // seguros — mas montar seletor com string crua é exatamente o tipo de coisa que quebra no dia
+  // em que o formato muda, então escapa de verdade.
+  function cssEscapeId(id){
+    return (window.CSS && CSS.escape) ? CSS.escape(id) : String(id).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
   function onExtractDone(msg){
     stopElapsed();
     var listEl = $("resultList");
     listEl.innerHTML = "";
     state.lastFailedIds = [];
+    state.canUpscale = !!msg.canUpscale;
+    state.upscale = {};
+    $("resultUpscaleError").hidden = true;
 
     Object.keys(state.extractProgress).forEach(function(id){
       var p = state.extractProgress[id];
       var row = document.createElement("tr");
+      row.id = "result-" + id;
       row.className = p.ok ? "done" : "failed";
       var nameCell = document.createElement("td");
       nameCell.textContent = p.label;
       var statusCell = document.createElement("td");
       statusCell.className = "stage";
-      statusCell.textContent = T(p.code === "E_CANCELLED" ? "me.extract.progress.cancelled"
-        : (p.ok ? "me.extract.progress.done" : "me.extract.progress.failed"));
+      renderResultStatusCell(statusCell, id, p);
       row.appendChild(nameCell); row.appendChild(statusCell);
       listEl.appendChild(row);
       if (!p.ok) state.lastFailedIds.push(id);

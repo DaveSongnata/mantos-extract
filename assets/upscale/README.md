@@ -22,19 +22,34 @@ Dentro do zip, copiar pra cá:
 assets/upscale/realesrgan-ncnn-vulkan.exe
 assets/upscale/vcomp140.dll
 assets/upscale/vcomp140d.dll
-assets/upscale/models/realesrgan-x4plus.bin
-assets/upscale/models/realesrgan-x4plus.param
+assets/upscale/models/realesrgan-x4plus-anime.bin
+assets/upscale/models/realesrgan-x4plus-anime.param
 ```
 
-**Não copiar os outros modelos do zip** (`realesrgan-x4plus-anime`, `realesrnet-x4plus`,
-`realesr-animevideov3*`) — não são usados e só engordam o instalador à toa.
+**Não copiar os outros modelos do zip** (`realesrgan-x4plus`, `realesrnet-x4plus`,
+`realesr-animevideov3*`) — não são usados e só engordam o instalador à toa (o x4plus sozinho
+tem 33MB contra os 8,9MB deste).
 
-## Por que `realesrgan-x4plus` e não o default do binário
+## Por que `realesrgan-x4plus-anime` (o nome engana)
 
-Sem `-n` explícito, o binário cai no seu próprio default (`realesr-animevideov3`), otimizado
-pra vídeo de anime — errado pra estampa/logo de roupa. `UpscalePaths.ModelName` fixa
-`realesrgan-x4plus` (modelo geral) e `UpscaleRunner.BuildArguments` sempre passa `-m`/`-n`
-explicitamente; nunca depender do default do binário.
+"anime" aqui quer dizer **treinado em arte ilustrada: borda dura, cor chapada** — que é
+exatamente o que estampa, logo, escudo e número de camisa são. Comparado 1:1 com o
+`realesrgan-x4plus` (treinado em foto real) na mesma imagem, devolveu bordas mais limpas,
+sendo **2,7× mais rápido** (7,8s vs 20,9s numa RTX 3050) e com modelo **3,7× menor**.
+
+**Nunca usar `realesr-animevideov3`** (o default do binário quando não se passa `-n`): é o mais
+rápido de todos (2,6s), mas **zera o canal alpha** — testado, devolve a imagem inteira
+transparente. Todo elemento extraído é PNG com transparência (M6), então sairia invisível no
+Corel. `UpscalePaths.ModelName` fixa o modelo e `UpscaleRunner.BuildArguments` sempre passa
+`-m`/`-n` explicitamente; nunca depender do default do binário.
+
+## Por que `-s 4` e não `-s 2`, se o produto entrega 2×
+
+Porque `-s` precisa ser a escala NATIVA da rede. Pedir `-s 2` de um modelo nativo 4× não produz
+um 2×: o binário posiciona os tiles como se a saída fosse 2× enquanto a rede devolve tiles 4×, e
+a imagem sai num mosaico de blocos desencontrados (bug real, visível a olho nu). O pipeline roda
+`-s 4` e reduz pela metade em `MantosExtract.Windows.ImageDownscaler` — que além de correto é
+melhor que um 2× direto, porque reduzir de 4× faz supersampling e suaviza os artefatos da rede.
 
 ## Layout esperado em runtime
 
@@ -42,10 +57,11 @@ explicitamente; nunca depender do default do binário.
 <install-dir>\upscale\realesrgan-ncnn-vulkan.exe
 <install-dir>\upscale\vcomp140.dll
 <install-dir>\upscale\vcomp140d.dll
-<install-dir>\upscale\models\realesrgan-x4plus.bin
-<install-dir>\upscale\models\realesrgan-x4plus.param
+<install-dir>\upscale\models\realesrgan-x4plus-anime.bin
+<install-dir>\upscale\models\realesrgan-x4plus-anime.param
 ```
 
 `build-all.ps1` copia `assets/upscale/*` (recursivo) pra `payload/upscale/` se
-`realesrgan-ncnn-vulkan.exe` existir aqui — mesma estrutura relativa, preservada. Fator fixo
-2x (`-s 2`, M8) — nenhuma opção pro operador.
+`realesrgan-ncnn-vulkan.exe` existir aqui — mesma estrutura relativa, preservada. Fator final
+sempre 2× (M8), agora **opcional**: o operador aciona peça por peça na tela de resultado.
+Sem estes arquivos o addin instala e funciona igual, só sem oferecer o botão de upscale.

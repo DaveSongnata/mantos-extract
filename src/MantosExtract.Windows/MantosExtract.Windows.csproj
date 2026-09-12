@@ -23,6 +23,8 @@
 
   <ItemGroup>
     <Reference Include="System.Security" />
+    <!-- ImageDownscaler: reduz o 4x nativo do Real-ESRGAN pro 2x que o produto entrega (M8). -->
+    <Reference Include="System.Drawing" />
   </ItemGroup>
 
   <ItemGroup>

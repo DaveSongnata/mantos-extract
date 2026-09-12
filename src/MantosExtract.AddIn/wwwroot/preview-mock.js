@@ -58,10 +58,11 @@
           }, 900);
           break;
         case "extract": {
+          // Sem estágio "upscaling" aqui (Dave, 2026-09-11): a extração entrega direto e o
+          // upscale virou opcional, por botão, na tela de resultado.
           var ids = cmd.ids || [];
           ids.forEach(function (id, i) {
             setTimeout(function () { window.mantosExtractReceive({ type: "extractProgress", id: id, index: i, total: ids.length, stage: "extracting" }); }, 300 + i * 900);
-            setTimeout(function () { window.mantosExtractReceive({ type: "extractProgress", id: id, index: i, total: ids.length, stage: "upscaling" }); }, 600 + i * 900);
             setTimeout(function () {
               var ok = !(i === 1 && ids.length > 1); // segundo elemento "falha" só pra mostrar o estado
               window.mantosExtractReceive({ type: "extractProgress", id: id, index: i, total: ids.length, stage: "done", ok: ok });
@@ -70,9 +71,22 @@
           setTimeout(function () {
             var failed = ids.length > 1 ? 1 : 0;
             credits -= (ids.length - failed);
-            window.mantosExtractReceive({ type: "extract", done: true, succeeded: ids.length - failed, failed: failed, skippedNoCredits: 0 });
+            window.mantosExtractReceive({ type: "extract", done: true, succeeded: ids.length - failed, failed: failed, skippedNoCredits: 0, canUpscale: true });
             window.mantosExtractReceive({ type: "credits", credits: credits });
           }, 900 + ids.length * 900 + 300);
+          break;
+        }
+        case "upscaleElement": {
+          var upId = cmd.id;
+          reply({ type: "upscaleProgress", id: upId, stage: "running" });
+          setTimeout(function () {
+            // "el-2" falha de propósito, pra o preview mostrar também o estado de erro.
+            var ok = upId !== "el-2";
+            window.mantosExtractReceive({
+              type: "upscaleProgress", id: upId, stage: "done", ok: ok,
+              error: ok ? null : "Não consegui melhorar a resolução desta peça.",
+            });
+          }, 1400);
           break;
         }
       }
@@ -111,7 +125,7 @@
     // também num screenshot automatizado.
     var qs = new URLSearchParams(location.search);
     var wanted = qs.get("screen");
-    if (wanted === "select" || wanted === "extracting") {
+    if (wanted === "select" || wanted === "extracting" || wanted === "result" || wanted === "result-upscaling") {
       // index.html inteiro roda dentro de uma IIFE — beginExtraction/renderSelectScreen NÃO são
       // globais, então simula como um humano de verdade: dispara o detect real, marca as
       // checkboxes (inclusive "Fundo") via evento de DOM, clica em Extrair de verdade.
@@ -120,9 +134,20 @@
         setTimeout(function () {
           var boxes = document.querySelectorAll("#selectChecklist input.swiss-check");
           boxes.forEach(function (cb) { cb.checked = true; cb.dispatchEvent(new Event("change")); });
-          if (wanted === "extracting") {
+          if (wanted !== "select") {
             var btn = document.getElementById("extractBtn");
             if (btn) btn.click();
+          }
+          // result/result-upscaling: deixa a extração simulada terminar sozinha e, no segundo
+          // caso, clica de verdade num botão "Upscale" da tela de resultado — o mesmo caminho
+          // que o operador percorre, pra o screenshot mostrar o estado real e não um mock.
+          // 6500ms: a extração simulada acima leva ~4,8s a partir do clique em "Extrair", então
+          // esperar menos que isso acharia a tela de resultado ainda vazia.
+          if (wanted === "result-upscaling") {
+            setTimeout(function () {
+              var upBtn = document.querySelector("#resultList .btn-sm");
+              if (upBtn) upBtn.click();
+            }, 6500);
           }
         }, 150);
       }, 1200);
