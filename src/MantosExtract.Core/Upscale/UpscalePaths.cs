@@ -49,10 +49,22 @@ namespace MantosExtract.Core.Upscale
             TempDir = tempDir ?? Path.Combine(Path.GetTempPath(), "MantosExtract", "upscale");
         }
 
-        /// <summary>True when the resolved path actually exists — the packaging step (bundling
-        /// the real binary + model files into the installer, plans/Phase_4.md) is NOT part of
-        /// this codebase; a machine without it must degrade gracefully, never crash.</summary>
+        /// <summary>True when the resolved path actually exists — a máquina sem o binário degrada,
+        /// nunca quebra.</summary>
         public bool ExecutableExists => File.Exists(ExecutablePath);
+
+        /// <summary>Caminho dos dois arquivos do modelo (o binário sozinho não faz nada).</summary>
+        public string ModelParamPath => Path.Combine(ModelsDir, ModelName + ".param");
+        public string ModelBinPath => Path.Combine(ModelsDir, ModelName + ".bin");
+
+        /// <summary>
+        /// O que realmente interessa antes de oferecer upscale pro operador: binário E modelo.
+        /// Só o .exe não basta — sem o modelo o Real-ESRGAN não degrada com elegância, ele
+        /// CRASHA (exit 0xC0000409, medido) depois de alguns segundos. Um instalador que levou o
+        /// .exe sem o models/ (bug real, 2026-09-11) cai exatamente nesse buraco: parecia
+        /// instalado, o botão aparecia, e o clique falhava sem explicação.
+        /// </summary>
+        public bool IsUsable => ExecutableExists && File.Exists(ModelParamPath) && File.Exists(ModelBinPath);
 
         private static string? InstallDir =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "MantosExtract", "upscale");

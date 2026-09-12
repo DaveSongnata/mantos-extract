@@ -589,7 +589,13 @@ namespace MantosExtract.AddIn.Ui
             // canUpscale: a tela de resultado só oferece o botão de upscale se o binário existe
             // MESMO nesta máquina — sem ele o clique não teria o que fazer (UpscaleStatus
             // .BinaryMissing), e um botão que nunca funciona é pior que botão nenhum.
-            Post(new { type = "extract", done = true, succeeded, failed, canUpscale = _upscalePaths.ExecutableExists });
+            // Logado ANTES de qualquer clique: se o upscale estiver indisponível nesta máquina, o
+            // docker.log já diz o que exatamente está faltando, sem depender do operador tentar.
+            MantosExtractLog.Write("Upscale disponivel=" + _upscalePaths.IsUsable +
+                " exe=" + _upscalePaths.ExecutablePath + " (" + (_upscalePaths.ExecutableExists ? "ok" : "AUSENTE") + ")" +
+                " modelo=" + (File.Exists(_upscalePaths.ModelBinPath) ? "ok" : "AUSENTE"));
+
+            Post(new { type = "extract", done = true, succeeded, failed, canUpscale = _upscalePaths.IsUsable });
         }
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela
@@ -725,7 +731,8 @@ namespace MantosExtract.AddIn.Ui
             UpscaleResult upscale = _upscaleRunner.Run(finalPath, timeoutSeconds: 300);
             if (upscale.Status != UpscaleStatus.Success)
             {
-                MantosExtractLog.Write("Upscale " + upscale.Status + " for " + id);
+                MantosExtractLog.Write("Upscale " + upscale.Status + " for " + id +
+                    (string.IsNullOrEmpty(upscale.Diagnostics) ? "" : " — " + upscale.Diagnostics));
                 PostUpscaleFailed(id, upscale.Status == UpscaleStatus.BinaryMissing
                     ? L("me.result.upscale.errorUnavailable")
                     : L("me.result.upscale.errorFailed"));

@@ -126,6 +126,25 @@ namespace MantosExtract.Core.Tests.Upscale
         }
 
         [Fact]
+        public void Run_ExePresentButModelMissing_IsBinaryMissing_NeverSpawnsTheCrashingProcess()
+        {
+            // Regressão (Dave, 2026-09-11): um instalador levou o .exe SEM a pasta models/. Como
+            // só o .exe era checado, o botão de upscale aparecia, o processo subia e CRASHAVA
+            // (exit 0xC0000409) depois de ~3s, sem explicação nenhuma no log.
+            string exe = Path.Combine(_tempDir, UpscalePaths.InstalledExeName);
+            File.WriteAllText(exe, "não é um exe de verdade, mas existe");
+            var paths = new UpscalePaths(exe, _tempDir);
+
+            Assert.True(paths.ExecutableExists);
+            Assert.False(paths.IsUsable); // models/ nem existe
+
+            UpscaleResult result = new UpscaleRunner(paths).Run(Path.Combine(_tempDir, "in.png"));
+
+            Assert.Equal(UpscaleStatus.BinaryMissing, result.Status);
+            Assert.Contains("AUSENTE", result.Diagnostics);
+        }
+
+        [Fact]
         public void Run_BinaryMissing_ReturnsBinaryMissing_WithoutSpawningAnything()
         {
             var paths = new UpscalePaths(Path.Combine(_tempDir, "does-not-exist.exe"), _tempDir);

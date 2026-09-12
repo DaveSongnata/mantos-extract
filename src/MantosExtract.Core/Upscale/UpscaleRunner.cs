@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -25,14 +26,22 @@ namespace MantosExtract.Core.Upscale
         public UpscaleStatus Status { get; }
         public string? OutputPath { get; }
 
-        private UpscaleResult(UpscaleStatus status, string? outputPath)
+        /// <summary>O que o binário disse antes de falhar (exit code + últimas linhas de
+        /// stdout/stderr) + o inventário da pasta de modelos. Existe porque um "Failed" sozinho no
+        /// docker.log não dá pra diagnosticar nada (Dave, 2026-09-11 — upscale falhou na máquina
+        /// dele em 2,7s e o log não tinha UMA linha dizendo por quê). Nulo quando deu certo.</summary>
+        public string? Diagnostics { get; }
+
+        private UpscaleResult(UpscaleStatus status, string? outputPath, string? diagnostics = null)
         {
             Status = status;
             OutputPath = outputPath;
+            Diagnostics = diagnostics;
         }
 
         public static UpscaleResult Ok(string outputPath) => new UpscaleResult(UpscaleStatus.Success, outputPath);
-        public static UpscaleResult Of(UpscaleStatus status) => new UpscaleResult(status, null);
+        public static UpscaleResult Of(UpscaleStatus status, string? diagnostics = null) =>
+            new UpscaleResult(status, null, diagnostics);
     }
 
     /// <summary>
@@ -58,7 +67,10 @@ namespace MantosExtract.Core.Upscale
         /// original PNG instead of blocking the whole element).</summary>
         public UpscaleResult Run(string inputPngPath, int timeoutSeconds = 90)
         {
-            if (!_paths.ExecutableExists) return UpscaleResult.Of(UpscaleStatus.BinaryMissing);
+            // Modelo ausente conta como BinaryMissing: é instalação incompleta do mesmo jeito, e
+            // deixar seguir só troca uma mensagem clara por um crash do processo filho.
+            if (!_paths.IsUsable)
+                return UpscaleResult.Of(UpscaleStatus.BinaryMissing, DescribeFailure("(não chegou a rodar)", ""));
 
             Directory.CreateDirectory(_paths.TempDir);
             string outputPath = Path.Combine(_paths.TempDir,
@@ -67,8 +79,56 @@ namespace MantosExtract.Core.Upscale
 
             string arguments = BuildArguments(
                 inputPngPath, outputPath, _paths.ModelsDir, UpscalePaths.ModelName, UpscalePaths.NativeScale);
-            UpscaleStatus status = RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds);
-            return status == UpscaleStatus.Success ? UpscaleResult.Ok(outputPath) : UpscaleResult.Of(status);
+            // Roda COM O CWD na pasta do próprio binário. O Real-ESRGAN resolve o caminho do
+            // modelo de forma peculiar (com um -m que ele não acha, a mensagem de erro sai com o
+            // diretório do exe concatenado na frente do caminho absoluto), e dentro do CorelDRAW
+            // o CWD herdado é o do host, não o nosso — fixar isso tira uma variável inteira da
+            // equação em vez de torcer pro comportamento ser o mesmo nas duas máquinas.
+            UpscaleStatus status = RunProcess(
+                _paths.ExecutablePath, arguments, outputPath, timeoutSeconds, out string processOutput,
+                Path.GetDirectoryName(_paths.ExecutablePath));
+
+            if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
+            return UpscaleResult.Of(status, DescribeFailure(arguments, processOutput));
+        }
+
+        /// <summary>Junta tudo que ajuda a explicar uma falha numa linha só de log: os argumentos
+        /// reais, o que o processo imprimiu, e se os arquivos que ele precisa estão mesmo no
+        /// disco — "modelo ausente", "sem GPU Vulkan" e "caminho errado" são causas distintas que
+        /// produzem o mesmo <see cref="UpscaleStatus.Failed"/> e só se separam por isto.</summary>
+        private string DescribeFailure(string arguments, string processOutput)
+        {
+            var sb = new StringBuilder();
+            sb.Append("args=[").Append(arguments).Append("]");
+
+            sb.Append(" exe=").Append(_paths.ExecutableExists ? "ok" : "AUSENTE");
+
+            string modelBin = Path.Combine(_paths.ModelsDir, UpscalePaths.ModelName + ".bin");
+            string modelParam = Path.Combine(_paths.ModelsDir, UpscalePaths.ModelName + ".param");
+            sb.Append(" modelo.bin=").Append(File.Exists(modelBin) ? "ok" : "AUSENTE");
+            sb.Append(" modelo.param=").Append(File.Exists(modelParam) ? "ok" : "AUSENTE");
+
+            try
+            {
+                sb.Append(" modelsDir=[");
+                if (Directory.Exists(_paths.ModelsDir))
+                {
+                    string[] files = Directory.GetFiles(_paths.ModelsDir);
+                    for (int i = 0; i < files.Length; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append(Path.GetFileName(files[i]));
+                    }
+                }
+                else sb.Append("PASTA NAO EXISTE");
+                sb.Append("]");
+            }
+            catch (Exception ex) { sb.Append("erro ao listar: ").Append(ex.Message).Append("]"); }
+
+            if (!string.IsNullOrWhiteSpace(processOutput))
+                sb.Append(" saida=[").Append(processOutput).Append("]");
+
+            return sb.ToString();
         }
 
         /// <summary>Pure — the exact CLI shape realesrgan-ncnn-vulkan.exe expects (-i in, -o
@@ -90,7 +150,12 @@ namespace MantosExtract.Core.Upscale
         /// actually exists — a 0 exit with no output file is still a failure, never a silent
         /// pass-through of the un-upscaled input.
         /// </summary>
-        internal static UpscaleStatus RunProcess(string exePath, string arguments, string expectedOutputPath, int timeoutSeconds)
+        internal static UpscaleStatus RunProcess(string exePath, string arguments, string expectedOutputPath, int timeoutSeconds) =>
+            RunProcess(exePath, arguments, expectedOutputPath, timeoutSeconds, out _);
+
+        internal static UpscaleStatus RunProcess(string exePath, string arguments, string expectedOutputPath,
+                                                 int timeoutSeconds, out string processOutput,
+                                                 string? workingDirectory = null)
         {
             var psi = new ProcessStartInfo
             {
@@ -98,22 +163,64 @@ namespace MantosExtract.Core.Upscale
                 Arguments = arguments,
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false,
+                WorkingDirectory = workingDirectory ?? "",
+                // Capturado (era descartado) pra uma falha do binário chegar no docker.log com o
+                // motivo junto. Lido por EVENTO, nunca ReadToEnd depois do Wait: o Real-ESRGAN
+                // despeja progresso sem parar e um pipe cheio travaria o processo pra sempre.
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
             };
 
-            using Process? proc = Process.Start(psi);
-            if (proc == null) return UpscaleStatus.Failed;
-
-            if (!proc.WaitForExit(timeoutSeconds * 1000))
+            var captured = new List<string>();
+            void Capture(string? line)
             {
-                try { proc.Kill(); } catch { /* already gone */ }
-                try { proc.WaitForExit(); } catch { /* best effort */ }
-                return UpscaleStatus.Timeout;
+                if (string.IsNullOrWhiteSpace(line)) return;
+                // Linhas de progresso ("12.24%") são ruído: centenas por execução e nenhuma
+                // ajuda a explicar uma falha.
+                if (line!.TrimEnd().EndsWith("%", StringComparison.Ordinal)) return;
+                lock (captured)
+                {
+                    captured.Add(line.Trim());
+                    if (captured.Count > MaxCapturedLines) captured.RemoveAt(0);
+                }
             }
 
-            if (proc.ExitCode != 0) return UpscaleStatus.Failed;
-            return File.Exists(expectedOutputPath) ? UpscaleStatus.Success : UpscaleStatus.Failed;
+            UpscaleStatus status;
+            using (Process? proc = Process.Start(psi))
+            {
+                if (proc == null) { processOutput = "Process.Start devolveu null"; return UpscaleStatus.Failed; }
+
+                proc.OutputDataReceived += (s, e) => Capture(e.Data);
+                proc.ErrorDataReceived += (s, e) => Capture(e.Data);
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                if (!proc.WaitForExit(timeoutSeconds * 1000))
+                {
+                    try { proc.Kill(); } catch { /* already gone */ }
+                    try { proc.WaitForExit(); } catch { /* best effort */ }
+                    processOutput = Join(captured);
+                    return UpscaleStatus.Timeout;
+                }
+
+                int exitCode = proc.ExitCode;
+                status = exitCode != 0
+                    ? UpscaleStatus.Failed
+                    : (File.Exists(expectedOutputPath) ? UpscaleStatus.Success : UpscaleStatus.Failed);
+
+                processOutput = status == UpscaleStatus.Success
+                    ? ""
+                    : "exit=" + exitCode + (exitCode == 0 ? " (saiu 0 mas nao gerou o arquivo)" : "") +
+                      (captured.Count > 0 ? " | " + Join(captured) : " | (sem saida)");
+            }
+            return status;
+        }
+
+        private const int MaxCapturedLines = 12;
+
+        private static string Join(List<string> lines)
+        {
+            lock (lines) return string.Join(" / ", lines.ToArray());
         }
 
         private static string Quote(string arg)
