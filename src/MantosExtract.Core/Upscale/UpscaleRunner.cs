@@ -17,6 +17,12 @@ namespace MantosExtract.Core.Upscale
         BinaryMissing,
         /// <summary>Ran past the timeout and was killed — never left hanging (M5).</summary>
         Timeout,
+        /// <summary>Não existe GPU com Vulkan utilizável nesta máquina (<c>vkCreateInstance
+        /// failed</c> / <c>invalid gpu device</c>). É categoria à parte de <see cref="Failed"/>
+        /// porque não é erro do arquivo nem coisa que "tentar de novo" resolva: o Real-ESRGAN
+        /// NCNN-Vulkan não tem caminho de CPU (M5/CLAUDE.md), então nesta máquina o upscale
+        /// simplesmente não existe e o operador tem que ser avisado disso, não de um erro.</summary>
+        GpuUnavailable,
         /// <summary>Exited non-zero, or exited 0 without producing the expected output file.</summary>
         Failed,
     }
@@ -81,6 +87,11 @@ namespace MantosExtract.Core.Upscale
             UpscaleStatus status = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds, out string output);
             if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
 
+            // Sem Vulkan não adianta tentar de novo com tile menor: o processo nem chega a alocar
+            // nada, morre em vkCreateInstance.
+            if (IndicatesNoUsableGpu(output))
+                return UpscaleResult.Of(UpscaleStatus.GpuUnavailable, DescribeFailure(DescribeAttempt(AutoTile), output));
+
             // Segunda tentativa, com tile pequeno e explícito. O tile automático é escolhido a
             // partir da memória de vídeo REPORTADA, que numa VM ou GPU integrada não corresponde
             // ao que dá pra alocar de verdade: o processo inicializa o Vulkan normalmente e só
@@ -93,9 +104,30 @@ namespace MantosExtract.Core.Upscale
             UpscaleStatus retry = RunOnce(inputPngPath, outputPath, FallbackTile, timeoutSeconds, out string retryOutput);
             if (retry == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath);
 
+            // A 1ª tentativa pode falhar calada e só a 2ª revelar que o problema é Vulkan (foi o
+            // que aconteceu na máquina do Dave, 2026-09-11), então a checagem vale pras duas.
+            if (retry == UpscaleStatus.Failed && IndicatesNoUsableGpu(retryOutput))
+                return UpscaleResult.Of(UpscaleStatus.GpuUnavailable,
+                    DescribeFailure(DescribeAttempt(AutoTile), output) + " | 2a tentativa: " + retryOutput);
+
             return UpscaleResult.Of(retry,
                 DescribeFailure(DescribeAttempt(AutoTile), output) +
                 " | 2a tentativa (-t " + FallbackTile + "): " + retryOutput);
+        }
+
+        /// <summary>
+        /// Reconhece, na saída do binário, "esta máquina não tem GPU com Vulkan utilizável".
+        /// <c>vkCreateInstance failed -9</c> é <c>VK_ERROR_INCOMPATIBLE_DRIVER</c>: o loader do
+        /// Vulkan (que vem no Windows) não achou NENHUM driver de GPU que o implemente — típico de
+        /// VM sem aceleração 3D. Não é falta de arquivo nosso: o ICD do Vulkan vem com o driver da
+        /// placa de vídeo, não com este addon.
+        /// </summary>
+        internal static bool IndicatesNoUsableGpu(string processOutput)
+        {
+            if (string.IsNullOrEmpty(processOutput)) return false;
+            return processOutput.IndexOf("vkCreateInstance failed", StringComparison.OrdinalIgnoreCase) >= 0
+                || processOutput.IndexOf("invalid gpu device", StringComparison.OrdinalIgnoreCase) >= 0
+                || processOutput.IndexOf("no vulkan device", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         /// <summary>Tile automático: o binário decide pelo que enxerga de VRAM.</summary>

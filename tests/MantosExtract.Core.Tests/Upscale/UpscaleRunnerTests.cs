@@ -57,6 +57,30 @@ namespace MantosExtract.Core.Tests.Upscale
             Assert.EndsWith("-t 128", tiled);
         }
 
+        [Theory]
+        // Saída REAL da máquina do Dave (docker.log, 2026-09-11) — VM sem driver Vulkan.
+        // -9 é VK_ERROR_INCOMPATIBLE_DRIVER: o loader do Vulkan não achou ICD de GPU nenhum.
+        [InlineData("exit=-1 | vkCreateInstance failed -9 / vkCreateInstance failed -9 / invalid gpu device")]
+        [InlineData("vkCreateInstance failed -9")]
+        [InlineData("invalid gpu device")]
+        [InlineData("no vulkan device")]
+        public void IndicatesNoUsableGpu_RecognisesTheRealVulkanFailures(string output)
+        {
+            Assert.True(UpscaleRunner.IndicatesNoUsableGpu(output));
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("exit=-1 | (sem saida)")]
+        [InlineData("decode image C:\\temp\\x.png failed")]
+        [InlineData("unknown model dir type")]
+        public void IndicatesNoUsableGpu_DoesNotSwallowOtherFailures(string output)
+        {
+            // Estes têm causa e tratamento próprios — chamar tudo de "sem GPU" esconderia
+            // exatamente os erros que o retry/diagnóstico conseguem resolver.
+            Assert.False(UpscaleRunner.IndicatesNoUsableGpu(output));
+        }
+
         [Fact]
         public void BuildArguments_AsksForVerbose_SoAFailureIsNeverSilent()
         {

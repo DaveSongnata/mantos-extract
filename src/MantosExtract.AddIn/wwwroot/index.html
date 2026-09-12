@@ -1230,6 +1230,16 @@
     if (msg.stage === "running") state.upscale[msg.id] = "running";
     else state.upscale[msg.id] = msg.ok ? "done" : "idle";
 
+    // Esta máquina não tem GPU compatível: o botão não vai funcionar em peça nenhuma, então
+    // some com todos de uma vez em vez de deixar o operador descobrir um por um.
+    if (msg.disableUpscale) {
+      state.canUpscale = false;
+      Object.keys(state.extractProgress).forEach(function(otherId){
+        var otherCell = document.querySelector('#result-' + cssEscapeId(otherId) + ' .stage');
+        if (otherCell) renderResultStatusCell(otherCell, otherId, state.extractProgress[otherId]);
+      });
+    }
+
     var cell = document.querySelector('#result-' + cssEscapeId(msg.id) + ' .stage');
     if (cell) renderResultStatusCell(cell, msg.id, p);
 

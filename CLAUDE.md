@@ -119,8 +119,16 @@ teste em `UpscaleRunnerTests`:**
    (`realesr-animevideov3`) que é o mais rápido de todos (2,6s) mas **ZERA o canal alpha** —
    todo elemento extraído é PNG transparente (M6), então sairia invisível no Corel.
 
-**Não tem fallback real pra CPU** — `-g -1` devolve `invalid gpu device` (exit 255) nesta build
-(v0.2.5.0); exige um device Vulkan de verdade (integrada OU dedicada). Não quebra nada:
+**EXIGE uma GPU com driver Vulkan; não tem fallback pra CPU.** `-g -1` devolve `invalid gpu
+device` (exit 255) nesta build (v0.2.5.0). Numa VM sem aceleração 3D o binário morre em
+`vkCreateInstance failed -9` (`VK_ERROR_INCOMPATIBLE_DRIVER` — medido na VM do Dave,
+2026-09-11): o loader do Vulkan vem no Windows, mas o ICD que o implementa vem no DRIVER DA
+PLACA DE VÍDEO, e uma GPU virtual não tem. **Isso não se resolve empacotando DLL nossa** — em
+PC real com Intel/AMD/NVIDIA e driver atualizado funciona; numa VM, só instalando um ICD por
+software (Mesa/lavapipe) à parte, o que seria lento demais pra valer a pena embutir.
+Tratado como `UpscaleStatus.GpuUnavailable`: mensagem própria ("este computador não tem placa
+de vídeo compatível") e os botões de upscale somem da tela toda, em vez de o operador colher o
+mesmo erro peça por peça. Não quebra nada:
 `UpscaleRunner.Run`/`UpscaleElement` tratam qualquer exit não-zero como degradação (a peça
 original continua no lugar, nada trava), e a tela de resultado nem mostra o botão quando o
 binário não existe (`canUpscale`). Tempos reais nesta VM de dev, imagem 1254×1254 → 2508×2508:

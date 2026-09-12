@@ -733,6 +733,17 @@ namespace MantosExtract.AddIn.Ui
             {
                 MantosExtractLog.Write("Upscale " + upscale.Status + " for " + id +
                     (string.IsNullOrEmpty(upscale.Diagnostics) ? "" : " — " + upscale.Diagnostics));
+
+                if (upscale.Status == UpscaleStatus.GpuUnavailable)
+                {
+                    // Não é erro desta peça nem coisa de tentar de novo: esta MÁQUINA não tem GPU
+                    // com Vulkan. Some com os botões de upscale da tela toda em vez de deixar o
+                    // operador clicando peça por peça pra colher o mesmo aviso N vezes.
+                    Post(new { type = "upscaleProgress", id, stage = "done", ok = false,
+                               error = L("me.result.upscale.errorNoGpu"), disableUpscale = true });
+                    return;
+                }
+
                 PostUpscaleFailed(id, upscale.Status == UpscaleStatus.BinaryMissing
                     ? L("me.result.upscale.errorUnavailable")
                     : L("me.result.upscale.errorFailed"));
