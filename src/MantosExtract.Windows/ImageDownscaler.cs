@@ -16,9 +16,9 @@ namespace MantosExtract.Windows
     public static class ImageDownscaler
     {
         /// <summary>Writes a half-size copy of <paramref name="inputPath"/> to
-        /// <paramref name="outputPath"/>. Returns false (leaving no output) if anything goes
-        /// wrong — the caller degrades to the un-halved image rather than losing the element.</summary>
-        public static bool TryHalve(string inputPath, string outputPath)
+        /// <paramref name="outputPath"/>. THROWS on failure (no partial output left behind): the
+        /// upscale pipeline logs every step with its stack trace, which a swallowed bool can't give.</summary>
+        public static void Halve(string inputPath, string outputPath)
         {
             try
             {
@@ -57,12 +57,11 @@ namespace MantosExtract.Windows
                         target.Save(outputPath, ImageFormat.Png);
                     }
                 }
-                return true;
             }
             catch
             {
                 try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
-                return false;
+                throw;
             }
         }
     }

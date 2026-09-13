@@ -24,8 +24,9 @@ namespace MantosExtract.Windows
         /// Escreve <paramref name="rgbPath"/> (opaco) e <paramref name="alphaPath"/> (cinza) a
         /// partir de <paramref name="inputPath"/>. Devolve false quando a imagem é totalmente
         /// opaca — aí não há nada a separar e o chamador manda o arquivo original direto.
+        /// LANÇA em caso de erro (o pipeline de upscale loga a etapa com stack trace).
         /// </summary>
-        public static bool TrySplit(string inputPath, string rgbPath, string alphaPath)
+        public static bool Split(string inputPath, string rgbPath, string alphaPath)
         {
             try
             {
@@ -81,8 +82,15 @@ namespace MantosExtract.Windows
             }
             catch
             {
-                return false;
+                TryDelete(rgbPath);
+                TryDelete(alphaPath);
+                throw;
             }
+        }
+
+        private static void TryDelete(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
 
         /// <summary>
@@ -91,7 +99,7 @@ namespace MantosExtract.Windows
         /// estampa é uma máscara de recorte, não textura — o que importa é a borda continuar no
         /// lugar, e é a rede que cuida do detalhe visível, que está no RGB.
         /// </summary>
-        public static bool TryCombine(string upscaledRgbPath, string originalAlphaPath, string outputPath)
+        public static void Combine(string upscaledRgbPath, string originalAlphaPath, string outputPath)
         {
             try
             {
@@ -143,15 +151,14 @@ namespace MantosExtract.Windows
 
                             EnsureDir(outputPath);
                             result.Save(outputPath, ImageFormat.Png);
-                            return true;
                         }
                     }
                 }
             }
             catch
             {
-                try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
-                return false;
+                TryDelete(outputPath);
+                throw;
             }
         }
 

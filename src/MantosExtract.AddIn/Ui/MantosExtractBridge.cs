@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -596,16 +596,14 @@ namespace MantosExtract.AddIn.Ui
             try { File.WriteAllText(Path.Combine(batchDir, "batch.json"), manifest.ToJson()); }
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
-            // canUpscale: a tela de resultado só oferece o botão de upscale se o binário existe
-            // MESMO nesta máquina — sem ele o clique não teria o que fazer (UpscaleStatus
-            // .BinaryMissing), e um botão que nunca funciona é pior que botão nenhum.
-            // Logado ANTES de qualquer clique: se o upscale estiver indisponível nesta máquina, o
-            // docker.log já diz o que exatamente está faltando, sem depender do operador tentar.
-            MantosExtractLog.Write("Upscale disponivel=" + _upscalePaths.IsUsable +
-                " exe=" + _upscalePaths.ExecutablePath + " (" + (_upscalePaths.ExecutableExists ? "ok" : "AUSENTE") + ")" +
-                " modelo=" + (File.Exists(_upscalePaths.ModelBinPath) ? "ok" : "AUSENTE"));
+            // canUpscale é sempre true: o último degrau do UpscalePipeline (Lanczos gerenciado /
+            // GDI+) não depende de nada instalado, então o botão sempre tem como entregar um 2×.
+            // O log abaixo registra só qual qualidade esta máquina vai conseguir.
+            MantosExtractLog.Write("Upscale: IA GPU=" + _upscalePaths.IsUsable +
+                " IA CPU=" + _upscalePaths.HasCpuFallback + " classico=sempre" +
+                " exe=" + _upscalePaths.ExecutablePath + " (" + (_upscalePaths.ExecutableExists ? "ok" : "AUSENTE") + ")");
 
-            Post(new { type = "extract", done = true, succeeded, failed, canUpscale = _upscalePaths.IsUsable });
+            Post(new { type = "extract", done = true, succeeded, failed, canUpscale = true });
         }
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela
@@ -715,145 +713,47 @@ namespace MantosExtract.AddIn.Ui
             catch { /* best-effort cleanup, never worth failing a completed extraction over */ }
         }
 
-        /// <summary>
-        /// Upscale OPCIONAL de UM elemento já extraído (Dave, 2026-09-11), disparado pelo botão
-        /// da tela de resultado. Roda o Real-ESRGAN na escala nativa do modelo (4×), reduz pela
-        /// metade pro 2× que o produto entrega (M8) e troca a peça já posicionada no Corel pela
-        /// versão em alta — mesma posição, mesmo tamanho físico.
-        ///
-        /// Falhar aqui NUNCA é destrutivo: o arquivo original só é sobrescrito depois que a
-        /// versão nova está pronta e encaixada, então qualquer erro no meio deixa o operador
-        /// exatamente com o que ele já tinha.
-        /// </summary>
         private void UpscaleElement(string id, UpscaleDevice device)
         {
-            if (string.IsNullOrEmpty(id)) return;
-
-            if (!_extractedFiles.TryGetValue(id, out string? finalPath) || !File.Exists(finalPath))
-            {
-                MantosExtractLog.Write("Upscale: arquivo do elemento " + id + " não está mais disponível");
-                PostUpscaleFailed(id, L("me.result.upscale.errorMissing"));
-                return;
-            }
-
-            Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
-
-            // No modo CPU o modelo compacto zera o alpha, então o alpha sai de cena antes e volta
-            // depois (ImageAlphaSplitter). Numa imagem já opaca — o "Fundo" é sempre — TrySplit
-            // devolve false e o arquivo segue direto, sem custo nenhum.
-            string upscaleInput = finalPath;
-            string? rgbPath = null, alphaPath = null;
-            if (device == UpscaleDevice.Cpu)
-            {
-                string baseName = Path.GetFileNameWithoutExtension(finalPath);
-                string dir = WorkDir();
-                rgbPath = Path.Combine(dir, baseName + "_rgb.png");
-                alphaPath = Path.Combine(dir, baseName + "_alpha.png");
-                if (ImageAlphaSplitter.TrySplit(finalPath, rgbPath, alphaPath)) upscaleInput = rgbPath;
-                else { rgbPath = null; alphaPath = null; }
-            }
-
-            var sw = Stopwatch.StartNew();
-            // Timeout do modo CPU é MUITO maior: 89s medidos numa máquina de dev, e a máquina do
-            // operador pode ser bem mais lenta — 300s ali derrubaria um upscale que ia dar certo.
-            UpscaleResult upscale = _upscaleRunner.Run(upscaleInput,
-                timeoutSeconds: device == UpscaleDevice.Cpu ? 1800 : 300, device: device);
-            sw.Stop();
-            MantosExtractLog.Write("Upscale " + device + " " + upscale.Status + " for " + id +
-                " em " + Math.Round(sw.Elapsed.TotalSeconds, 1) + "s" +
-                (string.IsNullOrEmpty(upscale.Diagnostics) ? "" : " — " + upscale.Diagnostics));
-
-            if (upscale.Status != UpscaleStatus.Success)
-            {
-                if (rgbPath != null) { TryDelete(rgbPath); TryDelete(alphaPath!); }
-
-                if (upscale.Status == UpscaleStatus.GpuUnavailable)
-                {
-                    // Não é erro desta peça: esta MÁQUINA não tem GPU com Vulkan. Em vez de só
-                    // avisar, oferece o caminho por CPU (mais lento, porém funciona) — e só
-                    // desabilita o upscale de vez se nem esse caminho estiver disponível.
-                    bool cpuOffer = _upscalePaths.HasCpuFallback;
-                    Post(new { type = "upscaleProgress", id, stage = "done", ok = false,
-                               error = L(cpuOffer ? "me.result.upscale.errorNoGpuTryCpu"
-                                                  : "me.result.upscale.errorNoGpu"),
-                               offerCpu = cpuOffer, disableUpscale = !cpuOffer });
-                    return;
-                }
-
-                PostUpscaleFailed(id, upscale.Status == UpscaleStatus.BinaryMissing
-                    ? L("me.result.upscale.errorUnavailable")
-                    : L("me.result.upscale.errorFailed"));
-                return;
-            }
-
-            // O modo GPU devolve a escala nativa do modelo (4×) e precisa da metade pro 2× do
-            // produto (M8); o modo CPU usa um modelo 2× nativo e já entrega pronto.
-            string nativePath = upscale.OutputPath!;
-            string finishedPath;
-            if (upscale.ScaleApplied > UpscalePaths.CpuNativeScale)
-            {
-                finishedPath = Path.Combine(Path.GetDirectoryName(nativePath)!,
-                    Path.GetFileNameWithoutExtension(nativePath) + "_half.png");
-                if (!ImageDownscaler.TryHalve(nativePath, finishedPath))
-                {
-                    MantosExtractLog.Write("Upscale: downscale 4x->2x falhou for " + id);
-                    TryDelete(nativePath);
-                    if (rgbPath != null) { TryDelete(rgbPath); TryDelete(alphaPath!); }
-                    PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
-                    return;
-                }
-            }
-            else finishedPath = nativePath;
-
-            // Devolve a transparência que foi separada antes de passar pela rede.
-            string halvedPath = finishedPath;
-            string? recombinedPath = null;
-            if (alphaPath != null)
-            {
-                recombinedPath = Path.Combine(Path.GetDirectoryName(finishedPath)!,
-                    Path.GetFileNameWithoutExtension(finishedPath) + "_rgba.png");
-                if (ImageAlphaSplitter.TryCombine(finishedPath, alphaPath, recombinedPath))
-                {
-                    halvedPath = recombinedPath;
-                }
-                else
-                {
-                    MantosExtractLog.Write("Upscale: recombinar alpha falhou for " + id);
-                    TryDelete(nativePath); TryDelete(finishedPath);
-                    TryDelete(rgbPath!); TryDelete(alphaPath);
-                    PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
-                    return;
-                }
-            }
-
+            // Nada escapa daqui: uma exceção que subisse cairia no catch genérico do RunAsync, que
+            // manda o operador pra tela de LOGIN — o pior desfecho possível pra um clique de upscale.
             try
             {
-                if (!_corel.ReplaceTrackedShape(id, halvedPath))
+                if (string.IsNullOrEmpty(id)) return;
+
+                if (!_extractedFiles.TryGetValue(id, out string? finalPath) || !File.Exists(finalPath))
                 {
-                    // A peça não está mais na página (o operador apagou). O arquivo em alta
-                    // continua salvo na pasta do lote — só não há o que substituir no canvas.
-                    MantosExtractLog.Write("Upscale: shape de " + id + " não está mais no documento");
-                    File.Copy(halvedPath, finalPath, overwrite: true);
-                    PostUpscaleFailed(id, L("me.result.upscale.errorGone"));
+                    MantosExtractLog.Write("[upscale " + id + "] arquivo do elemento não está mais disponível: " + (finalPath ?? "(sem registro)"));
+                    PostUpscaleFailed(id, L("me.result.upscale.errorMissing"));
                     return;
                 }
 
-                _corel.RenameLastImportedShape(Path.GetFileNameWithoutExtension(finalPath));
-                File.Copy(halvedPath, finalPath, overwrite: true);
-                Post(new { type = "upscaleProgress", id, stage = "done", ok = true });
+                Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
+
+                UpscaleOutcome outcome = new UpscalePipeline(_upscalePaths, _upscaleRunner, _corel, WorkDir())
+                    .Run(id, finalPath, device);
+
+                switch (outcome.Kind)
+                {
+                    case UpscaleOutcomeKind.Done:
+                        Post(new { type = "upscaleProgress", id, stage = "done", ok = true, method = outcome.Method });
+                        break;
+                    case UpscaleOutcomeKind.OfferCpu:
+                        Post(new { type = "upscaleProgress", id, stage = "done", ok = false,
+                                   error = L("me.result.upscale.errorNoGpuTryCpu"), offerCpu = true });
+                        break;
+                    case UpscaleOutcomeKind.ShapeGone:
+                        PostUpscaleFailed(id, L("me.result.upscale.errorGone"));
+                        break;
+                    default:
+                        PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
+                        break;
+                }
             }
             catch (Exception ex)
             {
-                MantosExtractLog.Write("Upscale import FAILED for " + id + ": " + ex);
-                PostUpscaleFailed(id, L("me.result.upscale.errorFailed"));
-            }
-            finally
-            {
-                TryDelete(nativePath);
-                TryDelete(finishedPath);
-                if (recombinedPath != null) TryDelete(recombinedPath);
-                if (rgbPath != null) TryDelete(rgbPath);
-                if (alphaPath != null) TryDelete(alphaPath);
+                MantosExtractLog.Write("[upscale " + id + "] FATAL fora do pipeline: " + ex);
+                try { PostUpscaleFailed(id, L("me.result.upscale.errorFailed")); } catch { }
             }
         }
 

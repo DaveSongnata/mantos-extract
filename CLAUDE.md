@@ -141,6 +141,18 @@ contra RRDB 8,9MB) e com escala **2 nativa**, então já entrega o 2× do produt
 alpha por bicúbico e recombina (o "Fundo" é opaco e nem passa por isso: `TrySplit` devolve
 false). Tudo por `LockBits`; GetPixel/SetPixel em 6,3M de pixels levaria mais que o upscale.
 
+**O botão "Upscale" NUNCA termina em falha (Dave, 2026-09-13).** `Ui/UpscalePipeline.cs` é uma
+cadeia de 4 degraus, cada um só roda se o anterior não entregou: (1) IA na GPU → (2) IA na CPU
+(lavapipe + `cpu-vulkan/vulkan-1.dll` próprio, ao lado de uma cópia do exe, porque o loader
+Vulkan de VM é antigo e descarta o Mesa atual) → (3) Lanczos-3 gerenciado
+(`Core/Upscale/ClassicUpscaler.cs`, testado; ~1s pra 1254²) → (4) bicúbico GDI+. Os degraus 3 e 4
+não dependem de GPU, Vulkan, driver nem processo externo. Toda etapa é logada com tag única por
+execução, duração e **exceção completa com stack trace** ("babyproof"), mais um retrato do
+ambiente (SO, memória, tamanhos de arquivo, loader do sistema). Nenhuma exceção sai do pipeline
+— antes, um `Win32Exception` de `Process.Start` (exe bloqueado/corrompido) subia até o
+`RunAsync` e mandava o operador pra TELA DE LOGIN. Verificado com o exe da IA trocado por lixo:
+entrega 2× pelo degrau 3.
+
 Fluxo pro operador: `UpscaleStatus.GpuUnavailable` não é mais um beco sem saída — a tela
 oferece **"Upscale (CPU)"** avisando que leva alguns minutos, e só esconde o upscale de vez se
 nem o lavapipe estiver instalado. Nada disso quebra a extração: qualquer exit não-zero é
