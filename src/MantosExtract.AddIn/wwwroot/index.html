@@ -577,6 +577,7 @@
           <tbody id="resultList"></tbody>
         </table>
       </div>
+      <div class="inline-error" id="resultBatchError" hidden></div>
       <div class="result-summary" id="resultSummary"></div>
       <div class="inline-error" id="resultUpscaleError" hidden></div>
       <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
@@ -1273,6 +1274,16 @@
     state.canUpscale = !!msg.canUpscale;
     state.upscale = {};
     state.upscaleDevice = "gpu";
+
+    // Conta OpenAI do cliente sem crédito / teto de gasto: o lote parou, e a mensagem do servidor
+    // (que já diz o que fazer) aparece acima da tabela — sem ela, o operador só veria "falhou".
+    var batchErr = $("resultBatchError");
+    if (msg.error && (msg.code === "E_OPENAI_NO_CREDIT" || msg.code === "E_OPENAI_SPEND_LIMIT")) {
+      batchErr.textContent = msg.error;
+      batchErr.hidden = false;
+    } else {
+      batchErr.hidden = true;
+    }
     $("resultUpscaleError").hidden = true;
 
     Object.keys(state.extractProgress).forEach(function(id){

@@ -71,7 +71,11 @@
           setTimeout(function () {
             var failed = ids.length > 1 ? 1 : 0;
             credits -= (ids.length - failed);
-            window.mantosExtractReceive({ type: "extract", done: true, succeeded: ids.length - failed, failed: failed, skippedNoCredits: 0, canUpscale: true });
+            // ?nocredit na URL: simula a conta OpenAI do cliente sem crédito (screenshot do aviso).
+            var noCredit = location.search.indexOf("nocredit") >= 0;
+            window.mantosExtractReceive({ type: "extract", done: true, succeeded: ids.length - failed, failed: failed, skippedNoCredits: 0, canUpscale: true,
+              code: noCredit ? "E_OPENAI_NO_CREDIT" : null,
+              error: noCredit ? "Sua conta da OpenAI ficou sem crédito. A chave está correta — o que acabou foi o saldo. Adicione crédito em platform.openai.com/settings/organization/billing e tente de novo." : null });
             window.mantosExtractReceive({ type: "credits", credits: credits });
           }, 900 + ids.length * 900 + 300);
           break;

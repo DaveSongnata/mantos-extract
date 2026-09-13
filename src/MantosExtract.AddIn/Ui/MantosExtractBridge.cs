@@ -467,6 +467,11 @@ namespace MantosExtract.AddIn.Ui
 
             int succeeded = 0, failed = 0;
 
+            // Preenchido quando a conta OpenAI do cliente fica sem crédito / bate teto de gasto no
+            // meio do lote: o lote para ali e a tela de resultado mostra ESTA mensagem, em vez de
+            // uma coluna de "falhou" sem explicação.
+            MantosExtractApiException? quotaStop = null;
+
             for (int i = 0; i < confirmed.Count; i++)
             {
                 // "Cancelar tudo" (Dave, 2026-09-08): não começa mais nenhum elemento novo — os
@@ -538,6 +543,24 @@ namespace MantosExtract.AddIn.Ui
                     manifestElements.Add(new ExtractionBatchManifestElement
                     { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
+
+                    if (ex.IsOpenAiQuotaExhausted)
+                    {
+                        // Sem crédito, todas as próximas chamadas falhariam igual (e a OpenAI diz
+                        // que retentar não resolve): encerra o lote aqui marcando o resto.
+                        quotaStop = ex;
+                        for (int rest = i + 1; rest < confirmed.Count; rest++)
+                        {
+                            DetectedElement skipped = confirmed[rest];
+                            if (_skipElementIds.Remove(skipped.Id)) continue;
+                            failed++;
+                            manifestElements.Add(new ExtractionBatchManifestElement
+                            { Id = skipped.Id, Label = skipped.Label, FileName = null, Ok = false });
+                            Post(new { type = "extractProgress", id = skipped.Id, index = rest, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
+                        }
+                        MantosExtractLog.Write("Lote interrompido: conta OpenAI sem crédito/limite (" + ex.Code + ")");
+                        break;
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -575,12 +598,24 @@ namespace MantosExtract.AddIn.Ui
             // (_corel.ImportPng/MoveLastImportedShape mexem no documento ativo). "Dois fluxos" aqui
             // significa dois CAMINHOS DE CÓDIGO separados (ExtractOneBackgroundAsync nunca toca
             // no loop acima), não duas threads simultâneas.
-            if (wantsBackground && !ct.IsCancellationRequested)
+            if (wantsBackground && quotaStop != null)
+            {
+                // Lote já parou por falta de crédito: o fundo nem é tentado.
+                if (!_skipElementIds.Remove(BackgroundElementId))
+                {
+                    failed++;
+                    manifestElements.Add(new ExtractionBatchManifestElement
+                    { Id = BackgroundElementId, Label = L("me.select.backgroundLabel"), FileName = null, Ok = false });
+                    Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = false, code = quotaStop.Code, error = quotaStop.Message });
+                }
+            }
+            else if (wantsBackground && !ct.IsCancellationRequested)
             {
                 await ExtractOneBackgroundAsync(
                     session, openAiKey!, extractionQuality, batchDir, pageBounds, placedThisBatch,
                     manifestElements, ct,
-                    onSucceeded: () => succeeded++, onFailed: () => failed++
+                    onSucceeded: () => succeeded++, onFailed: () => failed++,
+                    onQuotaExhausted: ex => quotaStop = ex
                 ).ConfigureAwait(false);
             }
 
@@ -603,7 +638,8 @@ namespace MantosExtract.AddIn.Ui
                 " IA CPU=" + _upscalePaths.HasCpuFallback +
                 " exe=" + _upscalePaths.ExecutablePath + " (" + (_upscalePaths.ExecutableExists ? "ok" : "AUSENTE") + ")");
 
-            Post(new { type = "extract", done = true, succeeded, failed, canUpscale });
+            Post(new { type = "extract", done = true, succeeded, failed, canUpscale,
+                       code = quotaStop?.Code, error = quotaStop?.Message });
         }
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela
@@ -618,7 +654,8 @@ namespace MantosExtract.AddIn.Ui
             SessionState session, string openAiKey, string extractionQuality, string batchDir,
             (double LeftMm, double BottomMm, double WidthMm, double HeightMm) pageBounds,
             List<PlacedSlot> placedThisBatch, List<ExtractionBatchManifestElement> manifestElements,
-            CancellationToken ct, Action onSucceeded, Action onFailed)
+            CancellationToken ct, Action onSucceeded, Action onFailed,
+            Action<MantosExtractApiException>? onQuotaExhausted = null)
         {
             // "Cancelar este" enquanto ainda "NA FILA" (antes até de chegar aqui) — mesma
             // convenção do loop de elementos: CancelElement já postou o "cancelado" na hora do
@@ -661,6 +698,7 @@ namespace MantosExtract.AddIn.Ui
                 MantosExtractLog.Write("ExtractBackground FAILED (" + ex.Code + "): " + ex.Message);
 
                 if (ex.Code == "E_UNAUTHORIZED") { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
+                if (ex.IsOpenAiQuotaExhausted) onQuotaExhausted?.Invoke(ex);
 
                 onFailed();
                 manifestElements.Add(new ExtractionBatchManifestElement

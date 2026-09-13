@@ -14,5 +14,14 @@ namespace MantosExtract.Core.Api
 
         public MantosExtractApiException(string code, string message) : base(message) { Code = code; }
         public MantosExtractApiException(string code, string message, Exception inner) : base(message, inner) { Code = code; }
+
+        /// <summary>A conta OpenAI do CLIENTE (BYOK) ficou sem crédito ou bateu um teto de gasto —
+        /// códigos que o mantosfc devolve ao reconhecer o erro da OpenAI (openai_quota_error.ts).
+        /// Numa extração em lote isso vale pra todas as peças seguintes, então o lote para em vez
+        /// de colher o mesmo erro peça por peça.</summary>
+        public bool IsOpenAiQuotaExhausted => IsOpenAiQuotaCode(Code);
+
+        public static bool IsOpenAiQuotaCode(string? code) =>
+            code == "E_OPENAI_NO_CREDIT" || code == "E_OPENAI_SPEND_LIMIT";
     }
 }
