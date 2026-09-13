@@ -82,6 +82,9 @@ namespace MantosExtract.Core.Upscale
         public string CpuVulkanDir { get; }
         public string CpuIcdPath => Path.Combine(CpuVulkanDir, CpuIcdFileName);
 
+        /// <summary>Cópia do exe ao lado do nosso vulkan-1.dll — ver UpscaleRunner.RunOnce.</summary>
+        public string CpuExecutablePath => Path.Combine(CpuVulkanDir, InstalledExeName);
+
         /// <summary>Manifesto que é realmente entregue ao loader: uma cópia nossa em TempDir com
         /// o caminho da DLL ABSOLUTO (ver UpscaleRunner.PrepareCpuIcd). Só usado se existir; do
         /// contrário vale o CpuIcdPath original.</summary>

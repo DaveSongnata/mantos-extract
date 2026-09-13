@@ -235,11 +235,21 @@ namespace MantosExtract.Core.Upscale
             // vez de procurar GPU. VK_DRIVER_FILES é o nome atual e VK_ICD_FILENAMES o antigo —
             // manda os dois porque a versão do loader é a do Windows da máquina, não a nossa.
             string? icd = null;
+            string exe = _paths.ExecutablePath;
             if (cpu)
+            {
                 icd = File.Exists(_paths.EffectiveCpuIcdPath) ? _paths.EffectiveCpuIcdPath : _paths.CpuIcdPath;
+                // Modo CPU roda a CÓPIA do exe que fica em cpu-vulkan/, ao lado do nosso próprio
+                // vulkan-1.dll (loader Khronos 1.4.x). O Windows resolve DLL primeiro na pasta do
+                // exe, então o loader do sistema — que numa VM é antigo ou stub e descarta o
+                // lavapipe moderno com "vkCreateInstance failed -9", mesmo com DLL íntegra e ICD
+                // absoluto (medido na VM do Dave, 2026-09-13) — deixa de ser usado. O modo GPU
+                // segue com o loader do sistema, que é o que casa com o driver da placa.
+                if (File.Exists(_paths.CpuExecutablePath)) exe = _paths.CpuExecutablePath;
+            }
 
-            return RunProcess(_paths.ExecutablePath, arguments, outputPath, timeoutSeconds,
-                out processOutput, Path.GetDirectoryName(_paths.ExecutablePath), icd);
+            return RunProcess(exe, arguments, outputPath, timeoutSeconds,
+                out processOutput, Path.GetDirectoryName(exe), icd);
         }
 
         private string DescribeAttempt(int tileSize, UpscaleDevice device = UpscaleDevice.Gpu)

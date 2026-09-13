@@ -101,6 +101,15 @@ Texto integral: https://llvm.org/LICENSE.txt
 Exceção: https://spdx.org/licenses/LLVM-exception.html
 
 --------------------------------------------------------------------------------
+Vulkan Loader
+https://github.com/KhronosGroup/Vulkan-Loader
+--------------------------------------------------------------------------------
+Apache License 2.0
+Copyright (c) The Khronos Group Inc., Valve Corporation, LunarG, Inc.
+
+Texto integral: https://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
 Microsoft Visual C++ Runtime / Microsoft Edge WebView2 / bibliotecas .NET
 --------------------------------------------------------------------------------
 Copyright (c) Microsoft Corporation.
