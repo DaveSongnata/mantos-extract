@@ -31,17 +31,13 @@ namespace MantosExtract.AddIn.Ui
     }
 
     /// <summary>
-    /// Cadeia de upscale que termina SEMPRE com uma imagem 2× (Dave, 2026-09-13: "nem se o pc
-    /// quiser ele consiga falhar"). Degraus, cada um só roda se o anterior não entregou:
-    ///   1. IA na GPU (Real-ESRGAN + loader Vulkan do sistema)
-    ///   2. IA na CPU (Real-ESRGAN compacto + lavapipe + loader Vulkan próprio)
-    ///   3. Lanczos-3 gerenciado (ClassicUpscaler — só CPU e memória, nada nativo)
-    ///   4. Bicúbico do GDI+ (vem com o Windows; usa bem menos memória que o 3)
-    /// Os degraus 3 e 4 não dependem de GPU, Vulkan, driver nem processo externo.
+    /// Upscale por IA de uma peça: (1) Real-ESRGAN na GPU; se a máquina não tiver GPU com
+    /// Vulkan, a UI oferece (2) Real-ESRGAN compacto na CPU (lavapipe + loader Vulkan próprio).
+    /// Só IA — nenhum fallback de interpolação, que não é upscale de verdade.
     ///
     /// "Babyproof": cada etapa é logada com início, duração e — se falhar — a exceção COMPLETA
-    /// com stack trace, sob uma tag única por execução, e nenhuma exceção escapa daqui: uma falha
-    /// num degrau só faz a cadeia descer pro próximo.
+    /// com stack trace, sob uma tag única por execução, mais um retrato do ambiente. Nenhuma
+    /// exceção escapa daqui: falha vira um desfecho <see cref="UpscaleOutcomeKind.Failed"/>.
     /// </summary>
     internal sealed class UpscalePipeline
     {
@@ -82,6 +78,11 @@ namespace MantosExtract.AddIn.Ui
                     if (!_paths.IsUsable)
                     {
                         Log("degrau 1 (IA GPU) PULADO: binário/modelo não instalados");
+                        if (_paths.HasCpuFallback)
+                        {
+                            Log("modo CPU instalado -> oferecendo Upscale (CPU) ao operador");
+                            return new UpscaleOutcome(UpscaleOutcomeKind.OfferCpu);
+                        }
                     }
                     else
                     {
@@ -118,32 +119,12 @@ namespace MantosExtract.AddIn.Ui
                     }
                 }
 
-                // ---- degraus que não dependem de GPU/Vulkan/driver --------------------------
+                // Sem fallback de interpolação de propósito (Dave, 2026-09-13): ampliar por
+                // Lanczos/bicúbico não é upscale — não cria detalhe — e entregar isso com o mesmo
+                // selo "2x" enganaria o operador. Se a IA não rodou, o clique falha e diz.
                 if (twoX == null)
                 {
-                    string classic = Path.Combine(_workDir, baseName + "_classic2x.png");
-                    temps.Add(classic);
-                    if (Step("degrau 3: Lanczos gerenciado", () => FileUpscalers.Classic2x(finalPath, classic)))
-                    {
-                        twoX = classic;
-                        method = "classico";
-                    }
-                }
-
-                if (twoX == null)
-                {
-                    string gdi = Path.Combine(_workDir, baseName + "_gdi2x.png");
-                    temps.Add(gdi);
-                    if (Step("degrau 4: bicúbico GDI+", () => FileUpscalers.Gdi2x(finalPath, gdi)))
-                    {
-                        twoX = gdi;
-                        method = "gdi";
-                    }
-                }
-
-                if (twoX == null)
-                {
-                    Log("TODOS os degraus falharam — ver as exceções acima");
+                    Log("upscale por IA não foi possível — ver as exceções/diagnósticos acima");
                     return new UpscaleOutcome(UpscaleOutcomeKind.Failed);
                 }
 
@@ -248,6 +229,7 @@ namespace MantosExtract.AddIn.Ui
             {
                 string cpuDir = _paths.CpuVulkanDir;
                 Log("ambiente: os=" + Environment.OSVersion.VersionString +
+                    " integridade=" + MediumIntegrityLauncher.DescribeCurrentIntegrity() +
                     " processo64=" + Environment.Is64BitProcess +
                     " cpus=" + Environment.ProcessorCount +
                     " memoriaProcessoMB=" + (Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024)) +

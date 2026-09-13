@@ -141,17 +141,28 @@ contra RRDB 8,9MB) e com escala **2 nativa**, então já entrega o 2× do produt
 alpha por bicúbico e recombina (o "Fundo" é opaco e nem passa por isso: `TrySplit` devolve
 false). Tudo por `LockBits`; GetPixel/SetPixel em 6,3M de pixels levaria mais que o upscale.
 
-**O botão "Upscale" NUNCA termina em falha (Dave, 2026-09-13).** `Ui/UpscalePipeline.cs` é uma
-cadeia de 4 degraus, cada um só roda se o anterior não entregou: (1) IA na GPU → (2) IA na CPU
-(lavapipe + `cpu-vulkan/vulkan-1.dll` próprio, ao lado de uma cópia do exe, porque o loader
-Vulkan de VM é antigo e descarta o Mesa atual) → (3) Lanczos-3 gerenciado
-(`Core/Upscale/ClassicUpscaler.cs`, testado; ~1s pra 1254²) → (4) bicúbico GDI+. Os degraus 3 e 4
-não dependem de GPU, Vulkan, driver nem processo externo. Toda etapa é logada com tag única por
-execução, duração e **exceção completa com stack trace** ("babyproof"), mais um retrato do
-ambiente (SO, memória, tamanhos de arquivo, loader do sistema). Nenhuma exceção sai do pipeline
-— antes, um `Win32Exception` de `Process.Start` (exe bloqueado/corrompido) subia até o
-`RunAsync` e mandava o operador pra TELA DE LOGIN. Verificado com o exe da IA trocado por lixo:
-entrega 2× pelo degrau 3.
+**Só upscale por IA — sem fallback de interpolação (Dave, 2026-09-13).** `Ui/UpscalePipeline.cs`:
+(1) IA na GPU; sem GPU com Vulkan, a UI oferece (2) IA na CPU (lavapipe + `cpu-vulkan/vulkan-1.dll`
+próprio, ao lado de uma cópia do exe, porque o loader Vulkan de VM é antigo e descarta o Mesa
+atual). Chegou a existir um degrau Lanczos/bicúbico pra "nunca falhar" — removido: interpolação
+não cria detalhe, e entregá-la com o mesmo selo "2x" enganava o operador. Se a IA não roda, o
+clique falha e diz.
+
+**Por que o modo CPU falhava na VM do Dave (causa confirmada no código do loader):** o loader do
+Vulkan IGNORA `VK_DRIVER_FILES`/`VK_ICD_FILENAMES` quando o token do processo tem integridade
+`>= SECURITY_MANDATORY_HIGH_RID` (`loader_environment.c`, `is_high_integrity`) — Corel elevado ou
+VM com UAC desligado. `MantosExtract.Windows.MediumIntegrityLauncher` lança o exe com o token
+rebaixado pra integridade MÉDIA (atributo do token, funciona até sem UAC; provado com filho em
+integridade Baixa rodando `whoami /groups`) — só age quando o Corel está alto; senão vale o
+`Process` normal. No modo CPU também vão `VK_LOADER_DEBUG` (o loader escreve o MOTIVO de cada
+driver descartado — ex. "Failed to open dynamic library"; não é bloqueada pela elevação) e
+`VK_LOADER_LAYERS_DISABLE=~all~` (layers implícitas de OBS/overlay/Steam registradas no sistema
+carregam em toda instância e podem derrubá-la). Carregar o lavapipe direto como `vulkan-1.dll`
+NÃO funciona (`0xC0000139`: ele só exporta a interface de driver). Toda etapa é logada com tag única por execução, duração e **exceção completa
+com stack trace** ("babyproof"), mais um retrato do ambiente (SO, memória, tamanhos de arquivo,
+loader do sistema). Nenhuma exceção sai do pipeline — antes, um `Win32Exception` de
+`Process.Start` (exe bloqueado/corrompido) subia até o `RunAsync` e mandava o operador pra TELA
+DE LOGIN.
 
 Fluxo pro operador: `UpscaleStatus.GpuUnavailable` não é mais um beco sem saída — a tela
 oferece **"Upscale (CPU)"** avisando que leva alguns minutos, e só esconde o upscale de vez se

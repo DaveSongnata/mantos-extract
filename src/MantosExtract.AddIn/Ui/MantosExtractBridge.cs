@@ -78,7 +78,7 @@ namespace MantosExtract.AddIn.Ui
             _i18n = i18n ?? new LocalizationService();
             _reloadForLanguage = reloadForLanguage;
             _auth = new AuthOrchestrator(_authClient, _credentials);
-            _upscaleRunner = new UpscaleRunner(_upscalePaths);
+            _upscaleRunner = new UpscaleRunner(_upscalePaths, new MediumIntegrityLauncher());
             _core.WebMessageReceived += OnWebMessage;
         }
 
@@ -596,14 +596,14 @@ namespace MantosExtract.AddIn.Ui
             try { File.WriteAllText(Path.Combine(batchDir, "batch.json"), manifest.ToJson()); }
             catch (Exception ex) { MantosExtractLog.Write("Failed to write batch.json: " + ex.Message); }
 
-            // canUpscale é sempre true: o último degrau do UpscalePipeline (Lanczos gerenciado /
-            // GDI+) não depende de nada instalado, então o botão sempre tem como entregar um 2×.
-            // O log abaixo registra só qual qualidade esta máquina vai conseguir.
+            // O botão só aparece se há upscale por IA instalado (GPU ou CPU) — nunca é oferecido
+            // um upscale que não existe nesta máquina.
+            bool canUpscale = _upscalePaths.IsUsable || _upscalePaths.HasCpuFallback;
             MantosExtractLog.Write("Upscale: IA GPU=" + _upscalePaths.IsUsable +
-                " IA CPU=" + _upscalePaths.HasCpuFallback + " classico=sempre" +
+                " IA CPU=" + _upscalePaths.HasCpuFallback +
                 " exe=" + _upscalePaths.ExecutablePath + " (" + (_upscalePaths.ExecutableExists ? "ok" : "AUSENTE") + ")");
 
-            Post(new { type = "extract", done = true, succeeded, failed, canUpscale = true });
+            Post(new { type = "extract", done = true, succeeded, failed, canUpscale });
         }
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela

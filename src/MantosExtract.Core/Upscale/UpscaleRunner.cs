@@ -79,9 +79,12 @@ namespace MantosExtract.Core.Upscale
     {
         private readonly UpscalePaths _paths;
 
-        public UpscaleRunner(UpscalePaths paths)
+        private readonly IChildProcessLauncher? _launcher;
+
+        public UpscaleRunner(UpscalePaths paths, IChildProcessLauncher? launcher = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _launcher = launcher;
         }
 
         /// <summary>Upscales <paramref name="inputPngPath"/> at the model's native scale (4x).
@@ -249,7 +252,8 @@ namespace MantosExtract.Core.Upscale
             }
 
             return RunProcess(exe, arguments, outputPath, timeoutSeconds,
-                out processOutput, Path.GetDirectoryName(exe), icd);
+                out processOutput, Path.GetDirectoryName(exe), icd,
+                cpu ? _launcher : null);
         }
 
         private string DescribeAttempt(int tileSize, UpscaleDevice device = UpscaleDevice.Gpu)
@@ -361,7 +365,8 @@ namespace MantosExtract.Core.Upscale
         internal static UpscaleStatus RunProcess(string exePath, string arguments, string expectedOutputPath,
                                                  int timeoutSeconds, out string processOutput,
                                                  string? workingDirectory = null,
-                                                 string? vulkanIcdPath = null)
+                                                 string? vulkanIcdPath = null,
+                                                 IChildProcessLauncher? launcher = null)
         {
             var psi = new ProcessStartInfo
             {
@@ -381,6 +386,17 @@ namespace MantosExtract.Core.Upscale
             {
                 psi.EnvironmentVariables["VK_DRIVER_FILES"] = vulkanIcdPath;   // loader atual
                 psi.EnvironmentVariables["VK_ICD_FILENAMES"] = vulkanIcdPath;  // loader antigo
+                // O loader explica, em stderr, POR QUE descartou cada driver (DLL que não carrega,
+                // interface incompatível, variável ignorada por elevação...). Não está na lista de
+                // variáveis que a elevação bloqueia, então funciona sempre — é o motivo exato que
+                // faltava no log quando só aparecia "vkCreateInstance failed -9".
+                psi.EnvironmentVariables["VK_LOADER_DEBUG"] = "error,warn,info,driver";
+                // Layers implícitas registradas por outros programas (overlay do OBS, Steam,
+                // gravadores, antivírus) são carregadas em TODA instância Vulkan — confirmado no
+                // debug do loader numa máquina de dev (obs-vulkan64.json via HKLM). Uma quebrada
+                // derruba o vkCreateInstance. No modo CPU não precisamos de nenhuma. Também não
+                // está na lista de variáveis que a elevação bloqueia.
+                psi.EnvironmentVariables["VK_LOADER_LAYERS_DISABLE"] = "~all~";
             }
 
             var captured = new List<string>();
@@ -395,6 +411,23 @@ namespace MantosExtract.Core.Upscale
                     captured.Add(line.Trim());
                     if (captured.Count > MaxCapturedLines) captured.RemoveAt(0);
                 }
+            }
+
+            ChildProcessResult? launched = launcher?.TryRun(psi, timeoutSeconds);
+            if (launched != null)
+            {
+                foreach (string line in launched.OutputLines) Capture(line);
+                string head = "[" + launched.LaunchNote + "] ";
+                if (launched.TimedOut) { processOutput = head + "TIMEOUT | " + Join(captured); return UpscaleStatus.Timeout; }
+
+                UpscaleStatus st = launched.ExitCode != 0
+                    ? UpscaleStatus.Failed
+                    : (File.Exists(expectedOutputPath) ? UpscaleStatus.Success : UpscaleStatus.Failed);
+                processOutput = st == UpscaleStatus.Success
+                    ? ""
+                    : head + "exit=" + launched.ExitCode + (launched.ExitCode == 0 ? " (saiu 0 mas nao gerou o arquivo)" : "") +
+                      (captured.Count > 0 ? " | " + Join(captured) : " | (sem saida)");
+                return st;
             }
 
             UpscaleStatus status;
@@ -428,7 +461,8 @@ namespace MantosExtract.Core.Upscale
             return status;
         }
 
-        private const int MaxCapturedLines = 12;
+        // 40, não 12: com VK_LOADER_DEBUG o motivo real vem espalhado em várias linhas do loader.
+        private const int MaxCapturedLines = 40;
 
         private static string Join(List<string> lines)
         {
