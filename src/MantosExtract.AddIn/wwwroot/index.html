@@ -1202,6 +1202,15 @@
       fill.className = "kicker-fill";
       track.appendChild(fill);
       wrap.appendChild(track);
+      // Cancelar o upscale em andamento: só roda um por vez (guard de "ocupado" no C#), então o
+      // "cancel" geral mata exatamente este processo.
+      var stopBtn = document.createElement("button");
+      stopBtn.type = "button";
+      stopBtn.className = "row-cancel";
+      stopBtn.title = T("me.result.upscale.cancelTitle");
+      stopBtn.textContent = "×";
+      stopBtn.addEventListener("click", function(){ send({cmd:"cancel"}); });
+      wrap.appendChild(stopBtn);
     } else if (up === "done") {
       // "2×" em vez de "alta resolução" por escrito: cabe na coluna e é o número exato do que
       // aconteceu — número como peça gráfica é o idioma do design system (CLAUDE.md).

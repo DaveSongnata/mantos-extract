@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using MantosExtract.Core.Upscale;
 
 namespace MantosExtract.Windows
@@ -72,7 +73,7 @@ namespace MantosExtract.Windows
             return name + " (0x" + rid.ToString("X") + ")";
         }
 
-        public ChildProcessResult? TryRun(ProcessStartInfo psi, int timeoutSeconds)
+        public ChildProcessResult? TryRun(ProcessStartInfo psi, int timeoutSeconds, CancellationToken ct)
         {
             int current = CurrentIntegrityRid();
             if (!_force && current < HighRid) return null;
@@ -150,10 +151,19 @@ namespace MantosExtract.Windows
                     LaunchNote = "integridade rebaixada " + DescribeRid(current) + " -> " + DescribeRid(_targetRid) + " via " + api + jobNote,
                 };
 
-                uint wait = WaitForSingleObject(pi.hProcess, (uint)Math.Min(int.MaxValue, (long)timeoutSeconds * 1000));
-                if (wait == WAIT_TIMEOUT)
+                // Fatias de 200ms pra reagir ao cancelamento do operador na hora.
+                var waited = Stopwatch.StartNew();
+                bool finished = false;
+                while (!finished)
                 {
-                    result.TimedOut = true;
+                    finished = WaitForSingleObject(pi.hProcess, 200) != WAIT_TIMEOUT;
+                    if (finished) break;
+                    if (ct.IsCancellationRequested) { result.Cancelled = true; break; }
+                    if (waited.Elapsed.TotalSeconds >= timeoutSeconds) { result.TimedOut = true; break; }
+                }
+
+                if (!finished)
+                {
                     if (job != IntPtr.Zero) TerminateJobObject(job, 1); else TerminateProcess(pi.hProcess, 1);
                     WaitForSingleObject(pi.hProcess, 5000);
                 }

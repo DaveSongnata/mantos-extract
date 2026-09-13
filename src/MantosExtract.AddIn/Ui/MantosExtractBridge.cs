@@ -181,7 +181,10 @@ namespace MantosExtract.AddIn.Ui
                         // "cpu" só chega aqui se o operador clicou no botão de CPU depois de a GPU
                         // ter faltado — nunca é o padrão (é ~10× mais lento).
                         UpscaleDevice dev = device == "cpu" ? UpscaleDevice.Cpu : UpscaleDevice.Gpu;
-                        RunAsync(ct => Task.Run(() => UpscaleElement(upId, dev), ct));
+                        // CancellationToken.None no Task.Run de propósito: o token vai PRA DENTRO
+                        // do upscale (que mata o processo); se fosse passado aqui, um cancelamento
+                        // antes de a Task começar pularia o post de "cancelado" pra tela.
+                        RunAsync(ct => Task.Run(() => UpscaleElement(upId, dev, ct), CancellationToken.None));
                         break;
                     }
 
@@ -751,7 +754,7 @@ namespace MantosExtract.AddIn.Ui
             catch { /* best-effort cleanup, never worth failing a completed extraction over */ }
         }
 
-        private void UpscaleElement(string id, UpscaleDevice device)
+        private void UpscaleElement(string id, UpscaleDevice device, CancellationToken ct)
         {
             // Nada escapa daqui: uma exceção que subisse cairia no catch genérico do RunAsync, que
             // manda o operador pra tela de LOGIN — o pior desfecho possível pra um clique de upscale.
@@ -769,10 +772,13 @@ namespace MantosExtract.AddIn.Ui
                 Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
 
                 UpscaleOutcome outcome = new UpscalePipeline(_upscalePaths, _upscaleRunner, _corel, WorkDir())
-                    .Run(id, finalPath, device);
+                    .Run(id, finalPath, device, ct);
 
                 switch (outcome.Kind)
                 {
+                    case UpscaleOutcomeKind.Cancelled:
+                        Post(new { type = "upscaleProgress", id, stage = "done", ok = false, cancelled = true });
+                        break;
                     case UpscaleOutcomeKind.Done:
                         Post(new { type = "upscaleProgress", id, stage = "done", ok = true, method = outcome.Method });
                         break;

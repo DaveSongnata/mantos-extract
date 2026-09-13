@@ -112,6 +112,7 @@ namespace MantosExtract.Core.I18n
             ["me.result.upscale.errorNoGpuTryCpu"] = "Este computador não tem placa de vídeo compatível. Dá para fazer pelo processador, mas leva alguns minutos por peça — clique em \"Upscale (CPU)\" para tentar.",
             ["me.result.upscale.buttonCpu"] = "Upscale (CPU)",
             ["me.result.upscale.titleCpu"] = "Dobrar a resolução usando o processador — funciona sem placa de vídeo, mas leva alguns minutos",
+            ["me.result.upscale.cancelTitle"] = "Cancelar o upscale desta peça",
             ["me.result.upscale.errorGone"] = "A peça não está mais no documento — o arquivo em alta ficou salvo na pasta.",
 
             ["me.error.network.title"] = "Não conseguimos conectar",

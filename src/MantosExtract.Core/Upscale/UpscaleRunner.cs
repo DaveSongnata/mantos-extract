@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Text;
 
 namespace MantosExtract.Core.Upscale
@@ -25,6 +26,8 @@ namespace MantosExtract.Core.Upscale
         GpuUnavailable,
         /// <summary>Exited non-zero, or exited 0 without producing the expected output file.</summary>
         Failed,
+        /// <summary>O operador cancelou: o processo foi MORTO na hora, sem esperar terminar.</summary>
+        Cancelled,
     }
 
     /// <summary>Onde a rede roda. Sempre <see cref="Gpu"/> por padrão; <see cref="Cpu"/> só
@@ -93,7 +96,7 @@ namespace MantosExtract.Core.Upscale
         /// are all just a <see cref="UpscaleStatus"/> the caller degrades on (Fase 4: import the
         /// original PNG instead of blocking the whole element).</summary>
         public UpscaleResult Run(string inputPngPath, int timeoutSeconds = 90,
-                                 UpscaleDevice device = UpscaleDevice.Gpu)
+                                 UpscaleDevice device = UpscaleDevice.Gpu, CancellationToken ct = default)
         {
             // Modelo ausente conta como BinaryMissing: é instalação incompleta do mesmo jeito, e
             // deixar seguir só troca uma mensagem clara por um crash do processo filho.
@@ -116,7 +119,7 @@ namespace MantosExtract.Core.Upscale
             {
                 PrepareCpuIcd();
                 UpscaleStatus cpuStatus = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds,
-                                                  out string cpuOutput, device);
+                                                  out string cpuOutput, device, ct);
                 return cpuStatus == UpscaleStatus.Success
                     ? UpscaleResult.Ok(outputPath, scale)
                     : UpscaleResult.Of(cpuStatus,
@@ -125,7 +128,7 @@ namespace MantosExtract.Core.Upscale
 
             // Primeira tentativa: tile automático (o binário dimensiona pela VRAM que ele acha que
             // tem). É o mais rápido quando dá certo.
-            UpscaleStatus status = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds, out string output);
+            UpscaleStatus status = RunOnce(inputPngPath, outputPath, AutoTile, timeoutSeconds, out string output, UpscaleDevice.Gpu, ct);
             if (status == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath, scale);
 
             // Sem Vulkan não adianta tentar de novo com tile menor: o processo nem chega a alocar
@@ -142,7 +145,7 @@ namespace MantosExtract.Core.Upscale
             if (status != UpscaleStatus.Failed)
                 return UpscaleResult.Of(status, DescribeFailure(DescribeAttempt(AutoTile), output));
 
-            UpscaleStatus retry = RunOnce(inputPngPath, outputPath, FallbackTile, timeoutSeconds, out string retryOutput);
+            UpscaleStatus retry = RunOnce(inputPngPath, outputPath, FallbackTile, timeoutSeconds, out string retryOutput, UpscaleDevice.Gpu, ct);
             if (retry == UpscaleStatus.Success) return UpscaleResult.Ok(outputPath, scale);
 
             // A 1ª tentativa pode falhar calada e só a 2ª revelar que o problema é Vulkan (foi o
@@ -219,7 +222,7 @@ namespace MantosExtract.Core.Upscale
 
         private UpscaleStatus RunOnce(string inputPngPath, string outputPath, int tileSize,
                                       int timeoutSeconds, out string processOutput,
-                                      UpscaleDevice device = UpscaleDevice.Gpu)
+                                      UpscaleDevice device = UpscaleDevice.Gpu, CancellationToken ct = default)
         {
             if (File.Exists(outputPath)) File.Delete(outputPath);
 
@@ -253,7 +256,7 @@ namespace MantosExtract.Core.Upscale
 
             return RunProcess(exe, arguments, outputPath, timeoutSeconds,
                 out processOutput, Path.GetDirectoryName(exe), icd,
-                cpu ? _launcher : null);
+                cpu ? _launcher : null, ct);
         }
 
         private string DescribeAttempt(int tileSize, UpscaleDevice device = UpscaleDevice.Gpu)
@@ -366,7 +369,8 @@ namespace MantosExtract.Core.Upscale
                                                  int timeoutSeconds, out string processOutput,
                                                  string? workingDirectory = null,
                                                  string? vulkanIcdPath = null,
-                                                 IChildProcessLauncher? launcher = null)
+                                                 IChildProcessLauncher? launcher = null,
+                                                 CancellationToken ct = default)
         {
             var psi = new ProcessStartInfo
             {
@@ -413,11 +417,14 @@ namespace MantosExtract.Core.Upscale
                 }
             }
 
-            ChildProcessResult? launched = launcher?.TryRun(psi, timeoutSeconds);
+            if (ct.IsCancellationRequested) { processOutput = "CANCELADO antes de iniciar"; return UpscaleStatus.Cancelled; }
+
+            ChildProcessResult? launched = launcher?.TryRun(psi, timeoutSeconds, ct);
             if (launched != null)
             {
                 foreach (string line in launched.OutputLines) Capture(line);
                 string head = "[" + launched.LaunchNote + "] ";
+                if (launched.Cancelled) { processOutput = head + "CANCELADO pelo operador"; return UpscaleStatus.Cancelled; }
                 if (launched.TimedOut) { processOutput = head + "TIMEOUT | " + Join(captured); return UpscaleStatus.Timeout; }
 
                 UpscaleStatus st = launched.ExitCode != 0
@@ -440,13 +447,20 @@ namespace MantosExtract.Core.Upscale
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
-                if (!proc.WaitForExit(timeoutSeconds * 1000))
+                // Espera em fatias curtas pra reagir ao cancelamento na hora: um WaitForExit único
+                // de até 10 min (modo CPU) deixaria o botão "cancelar" sem efeito até o fim.
+                var waited = Stopwatch.StartNew();
+                while (!proc.WaitForExit(200))
                 {
+                    bool cancelled = ct.IsCancellationRequested;
+                    if (!cancelled && waited.Elapsed.TotalSeconds < timeoutSeconds) continue;
+
                     try { proc.Kill(); } catch { /* already gone */ }
-                    try { proc.WaitForExit(); } catch { /* best effort */ }
-                    processOutput = Join(captured);
-                    return UpscaleStatus.Timeout;
+                    try { proc.WaitForExit(5000); } catch { /* best effort */ }
+                    processOutput = (cancelled ? "CANCELADO pelo operador | " : "") + Join(captured);
+                    return cancelled ? UpscaleStatus.Cancelled : UpscaleStatus.Timeout;
                 }
+                proc.WaitForExit(); // garante que o stdout/stderr assíncrono terminou de chegar
 
                 int exitCode = proc.ExitCode;
                 status = exitCode != 0

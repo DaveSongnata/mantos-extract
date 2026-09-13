@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace MantosExtract.Core.Upscale
 {
@@ -7,6 +8,8 @@ namespace MantosExtract.Core.Upscale
     public sealed class ChildProcessResult
     {
         public bool TimedOut { get; set; }
+        /// <summary>O operador cancelou e o processo foi morto antes de terminar.</summary>
+        public bool Cancelled { get; set; }
         public int ExitCode { get; set; }
         public List<string> OutputLines { get; } = new List<string>();
         /// <summary>Como o processo foi lançado (vai pro diagnóstico).</summary>
@@ -27,6 +30,6 @@ namespace MantosExtract.Core.Upscale
         /// <summary>Lança <paramref name="psi"/> (FileName, Arguments, WorkingDirectory,
         /// EnvironmentVariables) e espera até <paramref name="timeoutSeconds"/>. Devolve null quando
         /// este launcher não precisa agir — o chamador então usa o <see cref="Process"/> padrão.</summary>
-        ChildProcessResult? TryRun(ProcessStartInfo psi, int timeoutSeconds);
+        ChildProcessResult? TryRun(ProcessStartInfo psi, int timeoutSeconds, CancellationToken ct);
     }
 }

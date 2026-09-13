@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using MantosExtract.Core.Upscale;
 using MantosExtract.Interop;
 using MantosExtract.Windows;
@@ -19,8 +20,10 @@ namespace MantosExtract.AddIn.Ui
         ShapeGone,
         /// <summary>2× gerado e salvo na pasta, mas o Corel recusou a troca.</summary>
         CorelFailed,
-        /// <summary>Nem os degraus sem GPU conseguiram (arquivo de entrada ilegível, disco cheio).</summary>
+        /// <summary>A IA não conseguiu (ver log).</summary>
         Failed,
+        /// <summary>O operador cancelou; o processo do upscale foi morto e nada foi trocado.</summary>
+        Cancelled,
     }
 
     internal sealed class UpscaleOutcome
@@ -58,7 +61,7 @@ namespace MantosExtract.AddIn.Ui
             _workDir = workDir;
         }
 
-        public UpscaleOutcome Run(string id, string finalPath, UpscaleDevice device)
+        public UpscaleOutcome Run(string id, string finalPath, UpscaleDevice device, CancellationToken ct = default)
         {
             _tag = "[upscale " + id + " #" + Guid.NewGuid().ToString("N").Substring(0, 6) + "] ";
             var total = Stopwatch.StartNew();
@@ -87,11 +90,12 @@ namespace MantosExtract.AddIn.Ui
                     else
                     {
                         UpscaleResult? r = null;
-                        Step("degrau 1: IA na GPU", () => r = _runner.Run(finalPath, GpuTimeoutSeconds, UpscaleDevice.Gpu));
+                        Step("degrau 1: IA na GPU", () => r = _runner.Run(finalPath, GpuTimeoutSeconds, UpscaleDevice.Gpu, ct));
                         if (r != null)
                         {
                             Log("degrau 1 resultado: " + r.Status + Diag(r));
                             if (r.OutputPath != null) temps.Add(r.OutputPath);
+                            if (r.Status == UpscaleStatus.Cancelled) return Cancelled();
 
                             if (r.Status == UpscaleStatus.Success)
                             {
@@ -114,7 +118,7 @@ namespace MantosExtract.AddIn.Ui
                     }
                     else
                     {
-                        twoX = RunAiOnCpu(finalPath, baseName, temps);
+                        twoX = RunAiOnCpu(finalPath, baseName, temps, ct);
                         if (twoX != null) method = "ia-cpu";
                     }
                 }
@@ -122,6 +126,9 @@ namespace MantosExtract.AddIn.Ui
                 // Sem fallback de interpolação de propósito (Dave, 2026-09-13): ampliar por
                 // Lanczos/bicúbico não é upscale — não cria detalhe — e entregar isso com o mesmo
                 // selo "2x" enganaria o operador. Se a IA não rodou, o clique falha e diz.
+                // Cancelado durante a IA ou logo depois: não troca nada no Corel nem no disco.
+                if (ct.IsCancellationRequested) return Cancelled();
+
                 if (twoX == null)
                 {
                     Log("upscale por IA não foi possível — ver as exceções/diagnósticos acima");
@@ -175,7 +182,13 @@ namespace MantosExtract.AddIn.Ui
             return Step("reduzir 4× -> 2×", () => ImageDownscaler.Halve(r.OutputPath!, half)) ? half : null;
         }
 
-        private string? RunAiOnCpu(string finalPath, string baseName, List<string> temps)
+        private UpscaleOutcome Cancelled()
+        {
+            Log("CANCELADO pelo operador — processo do upscale encerrado, nada foi trocado");
+            return new UpscaleOutcome(UpscaleOutcomeKind.Cancelled);
+        }
+
+        private string? RunAiOnCpu(string finalPath, string baseName, List<string> temps, CancellationToken ct)
         {
             string rgb = Path.Combine(_workDir, baseName + "_rgb.png");
             string alpha = Path.Combine(_workDir, baseName + "_alpha.png");
@@ -190,7 +203,7 @@ namespace MantosExtract.AddIn.Ui
 
             UpscaleResult? r = null;
             string input = hasAlpha ? rgb : finalPath;
-            Step("degrau 2: IA na CPU (lavapipe)", () => r = _runner.Run(input, CpuTimeoutSeconds, UpscaleDevice.Cpu));
+            Step("degrau 2: IA na CPU (lavapipe)", () => r = _runner.Run(input, CpuTimeoutSeconds, UpscaleDevice.Cpu, ct));
             if (r == null) return null;
             Log("degrau 2 resultado: " + r.Status + Diag(r));
             if (r.OutputPath != null) temps.Add(r.OutputPath);
