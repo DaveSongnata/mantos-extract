@@ -52,7 +52,8 @@ namespace MantosExtract.Interop
         /// NATIVA e com transparência (IVGBitmap.SaveAs, não a exportação da página, que reamostra
         /// pelo dpi e sai opaca) e passa a rastrear esse shape sob <paramref name="trackKey"/> pra
         /// que ReplaceTrackedShape o troque depois. Lança se a seleção não for um bitmap só.</summary>
-        void SaveSelectedBitmapForUpscale(string pngPath, string trackKey);
+        /// <returns>Linha pro log: atributos do bitmap e por qual via o arquivo saiu.</returns>
+        string SaveSelectedBitmapForUpscale(string pngPath, string trackKey);
 
         /// <summary>Active page bounding box in millimetres, used to place the first imported
         /// element sensibly when there is no prior element to lay out next to.</summary>

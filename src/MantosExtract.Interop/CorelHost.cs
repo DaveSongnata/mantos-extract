@@ -153,7 +153,7 @@ namespace MantosExtract.Interop
             CorelExporter.ExportSelectionToPng(_app, _app.ActiveDocument, path, dpi);
         }
 
-        public void SaveSelectedBitmapForUpscale(string pngPath, string trackKey)
+        public string SaveSelectedBitmapForUpscale(string pngPath, string trackKey)
         {
             using var _ = new CorelDocumentState(_app);
 
@@ -165,25 +165,47 @@ namespace MantosExtract.Interop
             if ((int)shape.Type != CorelConstants.CdrBitmapShape)
                 throw new InvalidOperationException("A seleção não é uma imagem (bitmap).");
 
+            // Atributos do IVGBitmap (typelib): vão pro log, e Transparent decide o caminho.
+            bool transparent = false;
+            string info;
+            try
+            {
+                dynamic bmp = shape.Bitmap;
+                transparent = (bool)bmp.Transparent;
+                info = "bitmap " + (int)bmp.SizeWidth + "x" + (int)bmp.SizeHeight + "px modo=" + (int)bmp.Mode +
+                       " transparente=" + transparent + " recortado=" + (bool)bmp.Cropped +
+                       " vinculado=" + (bool)bmp.ExternallyLinked;
+            }
+            catch (Exception ex) { info = "atributos do bitmap ilegíveis (" + ex.Message + ")"; }
+
             // IVGBitmap.SaveAs(FileName, Filter, Compression?) — confirmado na typelib. Todos os
             // parâmetros explícitos via InvokeMember (omitir opcional em COM já quebrou Import com
             // DISP_E_TYPEMISMATCH). Devolve um ExportFilter que precisa de Finish().
+            // Máquina real (2026-09-13): SaveAs dá E_FAIL em bitmap COM canal alpha — funcionou na
+            // foto original e falhou sempre na peça que acabara de voltar do upscale (PNG 32bpp).
+            // Bitmap transparente pula direto pra exportação da seleção.
             Exception? saveAsError = null;
-            try
+            if (!transparent)
             {
-                object bitmap = shape.Bitmap;
-                object? filter = bitmap.GetType().InvokeMember("SaveAs", System.Reflection.BindingFlags.InvokeMethod,
-                    null, bitmap, new object[] { pngPath, CorelConstants.CdrFilterPng, CorelConstants.CdrCompressionNone });
-                if (filter != null)
-                    filter.GetType().InvokeMember("Finish", System.Reflection.BindingFlags.InvokeMethod, null, filter, Array.Empty<object>());
+                try
+                {
+                    object bitmap = shape.Bitmap;
+                    object? filter = bitmap.GetType().InvokeMember("SaveAs", System.Reflection.BindingFlags.InvokeMethod,
+                        null, bitmap, new object[] { pngPath, CorelConstants.CdrFilterPng, CorelConstants.CdrCompressionNone });
+                    if (filter != null)
+                        filter.GetType().InvokeMember("Finish", System.Reflection.BindingFlags.InvokeMethod, null, filter, Array.Empty<object>());
+                }
+                catch (Exception ex) { saveAsError = ex; }
             }
-            catch (Exception ex) { saveAsError = ex; }
 
-            // Segunda via: o SaveAs do bitmap devolveu E_FAIL na máquina real (2026-09-13) em
-            // algumas imagens. Exporta a SELEÇÃO com transparência, no dpi que reproduz os pixels
+            // Segunda via: exporta a SELEÇÃO com transparência, no dpi que reproduz os pixels
             // nativos do bitmap (pixels / polegadas na página), pra não perder resolução.
-            if (saveAsError != null || !System.IO.File.Exists(pngPath))
+            string via = "SaveAs";
+            if (transparent || saveAsError != null || !System.IO.File.Exists(pngPath))
             {
+                via = "exportação da seleção" + (saveAsError != null
+                    ? " (SaveAs falhou: " + (saveAsError.InnerException?.Message ?? saveAsError.Message) + ")"
+                    : "");
                 int dpi = 300;
                 try
                 {
@@ -194,21 +216,22 @@ namespace MantosExtract.Interop
                     if (dpi > 2400) dpi = 2400;
                 }
                 catch { /* mantém 300 */ }
+                via += " a " + dpi + "dpi";
 
                 try { CorelExporter.ExportSelectionToPng(_app, _app.ActiveDocument, pngPath, dpi, transparent: true); }
                 catch (Exception exportEx)
                 {
                     throw new InvalidOperationException(
-                        "Não consegui ler a imagem selecionada: SaveAs do bitmap falhou (" +
-                        (saveAsError?.InnerException?.Message ?? saveAsError?.Message ?? "sem arquivo") +
-                        ") e a exportação da seleção também (" + exportEx.Message + ").", exportEx);
+                        "Não consegui ler a imagem selecionada [" + info + "]: " + via +
+                        " também falhou (" + exportEx.Message + ").", exportEx);
                 }
             }
 
             if (!System.IO.File.Exists(pngPath))
-                throw new InvalidOperationException("O CorelDRAW não gravou a imagem selecionada (" + pngPath + ").");
+                throw new InvalidOperationException("O CorelDRAW não gravou a imagem selecionada (" + pngPath + ") [" + info + "].");
 
             Track(trackKey, (object)shape);
+            return info + " via " + via;
         }
 
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ImportPng(string pngPath)

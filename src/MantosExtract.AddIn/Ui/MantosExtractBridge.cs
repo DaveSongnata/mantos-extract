@@ -773,7 +773,7 @@ namespace MantosExtract.AddIn.Ui
                     // de novo. O bitmap selecionado vai pra um PNG de trabalho e é trocado no lugar.
                     Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
                     finalPath = Path.Combine(WorkDir(), "selecao-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".png");
-                    try { _corel.SaveSelectedBitmapForUpscale(finalPath, id); }
+                    try { MantosExtractLog.Write("[upscale " + id + "] seleção lida: " + _corel.SaveSelectedBitmapForUpscale(finalPath, id)); }
                     catch (Exception ex)
                     {
                         MantosExtractLog.Write("[upscale " + id + "] não consegui ler a imagem selecionada: " + ex);
