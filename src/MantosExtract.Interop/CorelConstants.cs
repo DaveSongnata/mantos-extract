@@ -17,6 +17,8 @@ namespace MantosExtract.Interop
 
         // ENUM cdrFilter (export/import filter ids)
         public const int CdrFilterPng = 802;
+        // cdrCompressionType.cdrCompressionNone = 0 (vgcore-tlb-dump.txt) — usado no IVGBitmap.SaveAs.
+        public const int CdrCompressionNone = 0;
 
         // ENUM cdrExportRange
         public const int CdrExportRangeSelection = 2;

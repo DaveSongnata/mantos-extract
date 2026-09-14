@@ -71,6 +71,33 @@ namespace MantosExtract.Interop
             CorelExporter.ExportSelectionToPng(_app, _app.ActiveDocument, path, dpi);
         }
 
+        public void SaveSelectedBitmapForUpscale(string pngPath, string trackKey)
+        {
+            using var _ = new CorelDocumentState(_app);
+
+            dynamic selection = _app.ActiveSelection
+                ?? throw new InvalidOperationException("Nenhuma seleção ativa no CorelDRAW.");
+            if ((int)selection.Shapes.Count != 1)
+                throw new InvalidOperationException("Selecione exatamente UMA imagem para o upscale.");
+            dynamic shape = selection.Shapes[1]; // coleções COM do Corel são 1-based
+            if ((int)shape.Type != CorelConstants.CdrBitmapShape)
+                throw new InvalidOperationException("A seleção não é uma imagem (bitmap).");
+
+            // IVGBitmap.SaveAs(FileName, Filter, Compression?) — confirmado na typelib. Todos os
+            // parâmetros explícitos via InvokeMember (omitir opcional em COM já quebrou Import com
+            // DISP_E_TYPEMISMATCH). Devolve um ExportFilter que precisa de Finish().
+            object bitmap = shape.Bitmap;
+            object? filter = bitmap.GetType().InvokeMember("SaveAs", System.Reflection.BindingFlags.InvokeMethod,
+                null, bitmap, new object[] { pngPath, CorelConstants.CdrFilterPng, CorelConstants.CdrCompressionNone });
+            if (filter != null)
+                filter.GetType().InvokeMember("Finish", System.Reflection.BindingFlags.InvokeMethod, null, filter, Array.Empty<object>());
+
+            if (!System.IO.File.Exists(pngPath))
+                throw new InvalidOperationException("O CorelDRAW não gravou a imagem selecionada (" + pngPath + ").");
+
+            _trackedShapes[trackKey] = (object)shape;
+        }
+
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ImportPng(string pngPath)
         {
             using var _ = new CorelDocumentState(_app);
@@ -133,8 +160,14 @@ namespace MantosExtract.Interop
                 return false;
             }
 
+            // Nome do shape antigo: a versão em alta herda o mesmo nome (no upscale avulso da
+            // seleção, o nome é do operador e não pode virar "Bitmap").
+            string? oldName = null;
+            try { oldName = (string)((dynamic)tracked).Name; } catch { /* nome é cosmético */ }
+
             dynamic imported = CorelImporter.Import(_app, _app.ActiveDocument, pngPath);
             _lastImportedShape = imported;
+            if (!string.IsNullOrEmpty(oldName)) { try { imported.Name = oldName; } catch { } }
 
             // Tamanho primeiro, posição depois: mexer no tamanho reposiciona a âncora no Corel, e
             // o que importa é o resultado final ficar EXATAMENTE na caixa do antigo — upscale

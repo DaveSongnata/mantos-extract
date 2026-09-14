@@ -61,7 +61,8 @@ namespace MantosExtract.AddIn.Ui
             _workDir = workDir;
         }
 
-        public UpscaleOutcome Run(string id, string finalPath, UpscaleDevice device, CancellationToken ct = default)
+        public UpscaleOutcome Run(string id, string finalPath, UpscaleDevice device, CancellationToken ct = default,
+                                  bool renameShape = true)
         {
             _tag = "[upscale " + id + " #" + Guid.NewGuid().ToString("N").Substring(0, 6) + "] ";
             var total = Stopwatch.StartNew();
@@ -148,7 +149,9 @@ namespace MantosExtract.AddIn.Ui
 
                 if (replaced == true)
                 {
-                    Step("Corel: renomear a peça", () => _corel.RenameLastImportedShape(baseName));
+                    // Upscale avulso da seleção não renomeia: o nome original do operador já foi
+                    // herdado em ReplaceTrackedShape.
+                    if (renameShape) Step("Corel: renomear a peça", () => _corel.RenameLastImportedShape(baseName));
                     return new UpscaleOutcome(UpscaleOutcomeKind.Done, method);
                 }
                 if (replaced == false)

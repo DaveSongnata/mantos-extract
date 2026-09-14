@@ -140,6 +140,26 @@
     padding:6px 11px;cursor:pointer;
   }
   .btn-sm:hover{background:var(--ink);color:var(--surface);}
+  /* Travado enquanto outro upscale roda: continua visível (o operador entende que existe), só
+     apagado — nunca some. */
+  .btn-sm:disabled,.btn-sm:disabled:hover{opacity:.35;cursor:not-allowed;background:var(--surface);color:var(--ink);}
+  .home-upscale{display:flex;flex-direction:column;gap:8px;}
+  /* Modal de aviso: mesmo idioma Swiss (borda dura, raio zero, sem sombra); o fundo escurecido é
+     só pra tirar o foco da tabela atrás. */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(18,18,18,.6);z-index:1000;
+    display:flex;align-items:center;justify-content:center;padding:14px;}
+  .modal-backdrop[hidden]{display:none!important;}
+  .modal{background:var(--paper);border:var(--lw) solid var(--ink);width:100%;max-width:340px;
+    display:flex;flex-direction:column;gap:10px;padding:0 0 12px;}
+  .modal .bar{margin:0;}
+  .modal-pieces{padding:0 12px;font-weight:900;text-transform:uppercase;font-size:11px;letter-spacing:.02em;}
+  .modal-body{padding:0 12px;font-size:12px;line-height:1.45;}
+  .modal .primary{margin:0 12px;width:auto;}
+  .home-upscale-running{display:flex;align-items:center;justify-content:center;gap:8px;
+    font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.02em;
+    border:var(--lw) solid var(--ink);padding:10px;}
+  .inline-ok{font-size:11.5px;font-weight:700;color:var(--ink);
+    border-left:var(--lw) solid var(--ink);padding:6px 8px;background:var(--surface);}
   .row-cancel{
     margin-left:6px;width:16px;height:16px;flex:none;
     border:1.5px solid var(--ink);background:var(--surface);color:var(--ink);
@@ -514,6 +534,17 @@
       </div>
 
       <button type="button" id="detectBtn" class="primary" disabled data-i18n="me.detect.button">Detectar</button>
+
+      <!-- Upscale avulso da imagem selecionada, sem detectar/extrair de novo (Dave, 2026-09-13) -->
+      <div id="homeUpscaleBox" class="home-upscale" hidden>
+        <button type="button" id="homeUpscaleBtn" class="secondary"></button>
+        <div id="homeUpscaleRunning" class="home-upscale-running" hidden>
+          <span id="homeUpscaleRunningText"></span>
+          <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
+          <button type="button" class="row-cancel" id="homeUpscaleCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
+        </div>
+        <div id="homeUpscaleResult" class="inline-error" hidden></div>
+      </div>
     </section>
 
     <!-- 4.3: detectando -->
@@ -577,7 +608,15 @@
           <tbody id="resultList"></tbody>
         </table>
       </div>
-      <div class="inline-error" id="resultBatchError" hidden></div>
+      <div class="inline-error" id="resultBatchError" hidden style="white-space:pre-line;"></div>
+      <div id="copyrightModal" class="modal-backdrop" hidden>
+        <div class="modal" role="alertdialog" aria-labelledby="copyrightModalTitle">
+          <div class="bar"><span class="tab" aria-hidden="true"></span><span id="copyrightModalTitle" data-i18n="me.extract.result.copyrightTitle">Aviso de direitos autorais</span></div>
+          <div class="modal-pieces" id="copyrightModalPieces"></div>
+          <div class="modal-body" id="copyrightModalBody"></div>
+          <button type="button" id="copyrightModalOk" class="primary" data-i18n="me.extract.result.copyrightOk">Entendi</button>
+        </div>
+      </div>
       <div class="result-summary" id="resultSummary"></div>
       <div class="inline-error" id="resultUpscaleError" hidden></div>
       <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
@@ -763,6 +802,8 @@
   // ID sentinela do item "Fundo" (Dave, 2026-09-11) — tem que bater exatamente com
   // BackgroundElementId em MantosExtractBridge.cs.
   var BACKGROUND_ID = "__background__";
+  // Upscale avulso da imagem selecionada — tem que bater com SelectionUpscaleId no bridge.
+  var SELECTION_UPSCALE_ID = "__selection__";
 
   // Correction (Dave, 2026-09-11 — achado por auditoria de navegação pedida pelo Dave, "às
   // vezes fico sem saída"): screenBeforeSettings/screenBeforeHistory (dois campos separados,
@@ -813,6 +854,9 @@
     canUpscale: false,        // binário do Real-ESRGAN presente nesta máquina (o C# informa)
     upscale: {},              // id -> "idle"|"running"|"done" (upscale opcional, tela de resultado)
     upscaleDevice: "gpu",     // vira "cpu" quando a máquina não tem GPU com Vulkan
+    canUpscaleSelection: false, // IA de upscale instalada (vem no status) — botão da home
+    selectionUpscale: "idle", // "idle"|"running" — upscale avulso da imagem selecionada
+    selectionDevice: "gpu",   // "cpu" depois que a GPU faltou nesse fluxo
     lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
     extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
   };
@@ -860,7 +904,8 @@
       body.setAttribute("data-i18n", "me.detect.emptyState.body");
       window.applyI18n(box);
     }
-    $("detectBtn").disabled = !state.selIsBitmap;
+    $("detectBtn").disabled = !state.selIsBitmap || upscaleBusy();
+    renderHomeUpscale();
     // Minor fix (Dave, 2026-09-07): stays clickable (real `disabled` would swallow the click
     // and give the operator zero feedback) — just looks locked, and the click handler below
     // redirects to Configurações with a nudge instead of silently failing server-side later.
@@ -932,6 +977,10 @@
   function onStatus(msg){
     var wasBitmap = state.selIsBitmap;
     state.selIsBitmap = !!msg.selIsBitmap;
+    if (state.canUpscaleSelection !== !!msg.canUpscale) {
+      state.canUpscaleSelection = !!msg.canUpscale;
+      renderHomeUpscale();
+    }
     // Only the home screen reacts live to selection changes — mid-flow screens (detecting,
     // select, extracting, result) ignore the heartbeat so a stray click elsewhere in Corel
     // never yanks the operator out of what they were doing.
@@ -1157,7 +1206,7 @@
     var p = state.extractProgress[msg.id];
     if (!p) return;
     p.stage = msg.stage;
-    if (msg.stage === "done") { p.ok = !!msg.ok; p.code = msg.code; }
+    if (msg.stage === "done") { p.ok = !!msg.ok; p.code = msg.code; p.error = msg.error || ""; }
 
     var row = $("progress-" + msg.id);
     if (!row) return;
@@ -1228,9 +1277,16 @@
       btn.className = "btn-sm";
       btn.textContent = T(viaCpu ? "me.result.upscale.buttonCpu" : "me.result.upscale.button");
       btn.title = T(viaCpu ? "me.result.upscale.titleCpu" : "me.result.upscale.title");
+      // Um upscale por vez (Dave, 2026-09-13): enquanto qualquer um roda — de outra linha ou o
+      // da imagem selecionada na tela inicial — os demais botões ficam travados.
+      if (upscaleBusy()) {
+        btn.disabled = true;
+        btn.title = T("me.result.upscale.busyTitle");
+      }
       btn.addEventListener("click", function(){
+        if (upscaleBusy()) return;
         state.upscale[id] = "running";
-        renderResultStatusCell(cell, id, p);
+        rerenderResultRows();
         send({cmd:"upscaleElement", id: id, device: state.upscaleDevice || "gpu"});
       });
       wrap.appendChild(btn);
@@ -1238,7 +1294,72 @@
     box.appendChild(wrap);
   }
 
+  // Qualquer upscale em andamento (linha da tela de resultado OU imagem selecionada na home).
+  function upscaleBusy(){
+    if (state.selectionUpscale === "running") return true;
+    for (var k in state.upscale) if (state.upscale[k] === "running") return true;
+    return false;
+  }
+
+  // Redesenha todas as linhas: o estado de uma (rodando/terminou) trava ou libera as outras.
+  function rerenderResultRows(){
+    Object.keys(state.extractProgress).forEach(function(rowId){
+      var rowCell = document.querySelector('#result-' + cssEscapeId(rowId) + ' .stage');
+      if (rowCell) renderResultStatusCell(rowCell, rowId, state.extractProgress[rowId]);
+    });
+  }
+
+  // ---- upscale avulso da imagem selecionada (tela inicial) ------------------------------
+  function renderHomeUpscale(){
+    var box = $("homeUpscaleBox");
+    box.hidden = !state.canUpscaleSelection;
+    if (box.hidden) return;
+    var running = state.selectionUpscale === "running";
+    var btn = $("homeUpscaleBtn");
+    btn.textContent = T(state.selectionDevice === "cpu" ? "me.home.upscale.buttonCpu" : "me.home.upscale.button");
+    btn.disabled = !state.selIsBitmap || upscaleBusy();
+    btn.title = upscaleBusy() ? T("me.result.upscale.busyTitle") : T("me.home.upscale.title");
+    btn.hidden = running;
+    $("homeUpscaleRunning").hidden = !running;
+    $("homeUpscaleRunningText").textContent = T("me.home.upscale.running");
+    $("detectBtn").disabled = !state.selIsBitmap || upscaleBusy();
+  }
+
+  function onSelectionUpscaleProgress(msg){
+    var res = $("homeUpscaleResult");
+    if (msg.stage === "running") {
+      state.selectionUpscale = "running";
+    } else {
+      state.selectionUpscale = "idle";
+      if (msg.ok) {
+        res.className = "inline-ok"; res.textContent = T("me.home.upscale.done"); res.hidden = false;
+      } else if (msg.cancelled) {
+        res.hidden = true;
+      } else {
+        if (msg.offerCpu) state.selectionDevice = "cpu";
+        res.className = "inline-error";
+        res.textContent = msg.error || T("me.result.upscale.errorFailed");
+        res.hidden = false;
+      }
+    }
+    renderHomeUpscale();
+    rerenderResultRows();
+  }
+
+  $("homeUpscaleBtn").addEventListener("click", function(){
+    if (upscaleBusy() || !state.selIsBitmap) return;
+    state.selectionUpscale = "running";
+    $("homeUpscaleResult").hidden = true;
+    hide("homeError");
+    renderHomeUpscale();
+    rerenderResultRows();
+    send({cmd:"upscaleElement", id: SELECTION_UPSCALE_ID, device: state.selectionDevice});
+  });
+  $("homeUpscaleCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
+  $("copyrightModalOk").addEventListener("click", function(){ $("copyrightModal").hidden = true; });
+
   function onUpscaleProgress(msg){
+    if (msg.id === SELECTION_UPSCALE_ID) { onSelectionUpscaleProgress(msg); return; }
     var p = state.extractProgress[msg.id];
     if (!p) return;
     if (msg.stage === "running") state.upscale[msg.id] = "running";
@@ -1249,15 +1370,8 @@
     // em nenhum dos dois o operador deve descobrir clicando peça por peça.
     if (msg.offerCpu) state.upscaleDevice = "cpu";
     if (msg.disableUpscale) state.canUpscale = false;
-    if (msg.offerCpu || msg.disableUpscale) {
-      Object.keys(state.extractProgress).forEach(function(otherId){
-        var otherCell = document.querySelector('#result-' + cssEscapeId(otherId) + ' .stage');
-        if (otherCell) renderResultStatusCell(otherCell, otherId, state.extractProgress[otherId]);
-      });
-    }
-
-    var cell = document.querySelector('#result-' + cssEscapeId(msg.id) + ' .stage');
-    if (cell) renderResultStatusCell(cell, msg.id, p);
+    rerenderResultRows();
+    renderHomeUpscale();
 
     var errBox = $("resultUpscaleError");
     if (msg.stage === "done" && !msg.ok && msg.error) {
@@ -1273,6 +1387,31 @@
   // em que o formato muda, então escapa de verdade.
   function cssEscapeId(id){
     return (window.CSS && CSS.escape) ? CSS.escape(id) : String(id).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  // Recusa da OpenAI por direitos autorais (logo de marca, personagem...). O código próprio vem
+  // do mantosfc atualizado; o teste pelo texto cobre um servidor ainda sem deploy (E_UNKNOWN).
+  function isCopyrightRefusal(p){
+    if (p.ok) return false;
+    if (p.code === "E_OPENAI_MODERATION") return true;
+    return /direitos autorais|pol[ií]tica de conte[uú]do|safety system/i.test(p.error || "");
+  }
+
+  // Modal de aviso (Dave, 2026-09-13): o operador precisa entender que foi a OpenAI que recusou
+  // por política dela — não um defeito do Mantos Extract — e quais peças foram afetadas.
+  function showCopyrightModalIfNeeded(){
+    var names = [], message = "";
+    Object.keys(state.extractProgress).forEach(function(rid){
+      var rp = state.extractProgress[rid];
+      if (!isCopyrightRefusal(rp)) return;
+      names.push(rp.label);
+      if (!message) message = rp.error;
+    });
+    if (names.length === 0) return;
+    $("copyrightModalPieces").textContent = names.join(", ");
+    $("copyrightModalBody").textContent = message;
+    $("copyrightModal").hidden = false;
+    $("copyrightModalOk").focus();
   }
 
   function onExtractDone(msg){
@@ -1291,9 +1430,18 @@
       batchErr.textContent = msg.error;
       batchErr.hidden = false;
     } else {
-      batchErr.hidden = true;
+      // Sem essa lista, uma peça que falhou aparecia só como "FALHOU", sem motivo nenhum.
+      var reasons = [];
+      Object.keys(state.extractProgress).forEach(function(rid){
+        var rp = state.extractProgress[rid];
+        if (rp.ok || !rp.error || rp.code === "E_CANCELLED" || isCopyrightRefusal(rp)) return;
+        reasons.push(rp.label + ": " + rp.error);
+      });
+      batchErr.textContent = reasons.join("\n");
+      batchErr.hidden = reasons.length === 0;
     }
     $("resultUpscaleError").hidden = true;
+    showCopyrightModalIfNeeded();
 
     Object.keys(state.extractProgress).forEach(function(id){
       var p = state.extractProgress[id];

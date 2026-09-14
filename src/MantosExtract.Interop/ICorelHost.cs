@@ -47,6 +47,13 @@ namespace MantosExtract.Interop
         /// of silently dropping a second copy on the canvas.</summary>
         bool ReplaceTrackedShape(string key, string pngPath);
 
+        /// <summary>Upscale avulso (Dave, 2026-09-13 — "só fazer upscale de um elemento, sem
+        /// regerar"): grava o bitmap ÚNICO selecionado em <paramref name="pngPath"/> na resolução
+        /// NATIVA e com transparência (IVGBitmap.SaveAs, não a exportação da página, que reamostra
+        /// pelo dpi e sai opaca) e passa a rastrear esse shape sob <paramref name="trackKey"/> pra
+        /// que ReplaceTrackedShape o troque depois. Lança se a seleção não for um bitmap só.</summary>
+        void SaveSelectedBitmapForUpscale(string pngPath, string trackKey);
+
         /// <summary>Active page bounding box in millimetres, used to place the first imported
         /// element sensibly when there is no prior element to lay out next to.</summary>
         (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ActivePageBoundsMm();

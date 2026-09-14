@@ -43,7 +43,7 @@
           reply({ type: "auth", screen: "login" });
           break;
         case "status":
-          reply({ type: "status", doc: "exemplo.cdr", sel: 1, selIsBitmap: true, build: "preview" });
+          reply({ type: "status", doc: "exemplo.cdr", sel: 1, selIsBitmap: true, canUpscale: true, build: "preview" });
           break;
         case "saveOpenAiKey":
           reply({ type: "openaiKey", ok: true, saved: !!cmd.key });
@@ -65,7 +65,12 @@
             setTimeout(function () { window.mantosExtractReceive({ type: "extractProgress", id: id, index: i, total: ids.length, stage: "extracting" }); }, 300 + i * 900);
             setTimeout(function () {
               var ok = !(i === 1 && ids.length > 1); // segundo elemento "falha" só pra mostrar o estado
-              window.mantosExtractReceive({ type: "extractProgress", id: id, index: i, total: ids.length, stage: "done", ok: ok });
+              // ?copyright na URL: a peça que falha vem como recusa por direitos autorais.
+              var copyright = !ok && location.search.indexOf("copyright") >= 0;
+              window.mantosExtractReceive({ type: "extractProgress", id: id, index: i, total: ids.length, stage: "done", ok: ok,
+                code: copyright ? "E_OPENAI_MODERATION" : (ok ? null : "E_UNKNOWN"),
+                error: copyright ? "A OpenAI recusou processar esta imagem por política de conteúdo dela — provavelmente por conter uma marca, logo ou personagem protegido por direitos autorais. Isso não é um erro do Mantos Extract; tente outro elemento."
+                                 : (ok ? null : "O servidor respondeu com erro (500).") });
             }, 900 + i * 900);
           });
           setTimeout(function () {
@@ -129,7 +134,15 @@
     // também num screenshot automatizado.
     var qs = new URLSearchParams(location.search);
     var wanted = qs.get("screen");
-    if (wanted === "select" || wanted === "extracting" || wanted === "result" || wanted === "result-upscaling") {
+    if (wanted === "home-upscaling") {
+      // Tela inicial com o upscale da imagem selecionada em andamento (clique real no botão).
+      setTimeout(function () {
+        var home = document.getElementById("screen-home");
+        SCREENS.forEach(function (s) { var el = document.getElementById(s); if (el) el.hidden = (s !== "screen-home"); });
+        window.mantosExtractReceive({ type: "status", doc: "exemplo.cdr", sel: 1, selIsBitmap: true, canUpscale: true });
+        setTimeout(function () { document.getElementById("homeUpscaleBtn").click(); }, 200);
+      }, 1200);
+    } else if (wanted === "select" || wanted === "extracting" || wanted === "result" || wanted === "result-upscaling") {
       // index.html inteiro roda dentro de uma IIFE — beginExtraction/renderSelectScreen NÃO são
       // globais, então simula como um humano de verdade: dispara o detect real, marca as
       // checkboxes (inclusive "Fundo") via evento de DOM, clica em Extrair de verdade.

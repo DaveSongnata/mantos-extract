@@ -420,6 +420,9 @@ namespace MantosExtract.AddIn.Ui
         // loop de elementos abaixo, exatamente como o Dave pediu ("e": endpoint/fluxo dedicado,
         // "b": não afeta o que já funciona pros elementos).
         private const string BackgroundElementId = "__background__";
+        // Id sentinela do upscale avulso da imagem selecionada (botão da tela inicial) — tem que
+        // bater com SELECTION_UPSCALE_ID no index.html.
+        private const string SelectionUpscaleId = "__selection__";
 
         private async Task RunExtractAsync(string[] confirmedIds, CancellationToken ct)
         {
@@ -762,17 +765,35 @@ namespace MantosExtract.AddIn.Ui
             {
                 if (string.IsNullOrEmpty(id)) return;
 
-                if (!_extractedFiles.TryGetValue(id, out string? finalPath) || !File.Exists(finalPath))
+                bool fromSelection = id == SelectionUpscaleId;
+                string? finalPath;
+                if (fromSelection)
                 {
-                    MantosExtractLog.Write("[upscale " + id + "] arquivo do elemento não está mais disponível: " + (finalPath ?? "(sem registro)"));
-                    PostUpscaleFailed(id, L("me.result.upscale.errorMissing"));
-                    return;
+                    // Upscale avulso de uma imagem que já está no documento — sem detectar/extrair
+                    // de novo. O bitmap selecionado vai pra um PNG de trabalho e é trocado no lugar.
+                    Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
+                    finalPath = Path.Combine(WorkDir(), "selecao-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".png");
+                    try { _corel.SaveSelectedBitmapForUpscale(finalPath, id); }
+                    catch (Exception ex)
+                    {
+                        MantosExtractLog.Write("[upscale " + id + "] não consegui ler a imagem selecionada: " + ex);
+                        PostUpscaleFailed(id, L("me.home.upscale.errorSelection") + " (" + ex.Message + ")");
+                        return;
+                    }
+                }
+                else
+                {
+                    if (!_extractedFiles.TryGetValue(id, out finalPath) || !File.Exists(finalPath))
+                    {
+                        MantosExtractLog.Write("[upscale " + id + "] arquivo do elemento não está mais disponível: " + (finalPath ?? "(sem registro)"));
+                        PostUpscaleFailed(id, L("me.result.upscale.errorMissing"));
+                        return;
+                    }
+                    Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
                 }
 
-                Post(new { type = "upscaleProgress", id, stage = "running", device = device.ToString().ToLowerInvariant() });
-
                 UpscaleOutcome outcome = new UpscalePipeline(_upscalePaths, _upscaleRunner, _corel, WorkDir())
-                    .Run(id, finalPath, device, ct);
+                    .Run(id, finalPath!, device, ct, renameShape: !fromSelection);
 
                 switch (outcome.Kind)
                 {
@@ -904,6 +925,7 @@ namespace MantosExtract.AddIn.Ui
                 doc = _corel.DocumentName,
                 sel = _corel.SelectionShapeCount,
                 selIsBitmap = _corel.SelectionIsSingleBitmap,
+                canUpscale = _upscalePaths.IsUsable || _upscalePaths.HasCpuFallback,
                 build = Build.Tag,
             });
         }
