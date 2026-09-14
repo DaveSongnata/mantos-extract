@@ -73,6 +73,7 @@ namespace MantosExtract.AddIn.Ui
                                     LocalizationService? i18n = null, Action? reloadForLanguage = null)
         {
             _core = core;
+            InteropLog.Sink = MantosExtractLog.Write;
             _corel = new CorelHost(app);
             _runOnUi = runOnUi;
             _i18n = i18n ?? new LocalizationService();

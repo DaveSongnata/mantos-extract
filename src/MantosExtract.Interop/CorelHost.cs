@@ -31,7 +31,20 @@ namespace MantosExtract.Interop
         {
             _trackedShapes[key] = shape;
             try { _trackedIds[key] = (int)((dynamic)shape).StaticID; }
-            catch { _trackedIds.Remove(key); }
+            catch (Exception ex)
+            {
+                _trackedIds.Remove(key);
+                InteropLog.Write("rastrear '" + key + "': StaticID ilegível, só a referência fica guardada (" + InteropLog.Describe(ex) + ")");
+            }
+            InteropLog.Write("rastrear '" + key + "' -> " + InteropLog.ShapeInfo(shape) + " | rastreados: " + TrackedSummary());
+        }
+
+        private string TrackedSummary()
+        {
+            var parts = new List<string>();
+            foreach (var kv in _trackedShapes)
+                parts.Add(kv.Key + "=" + (_trackedIds.TryGetValue(kv.Key, out int id) ? id.ToString() : "?"));
+            return string.Join(", ", parts);
         }
 
         /// <summary>O shape vivo da peça <paramref name="key"/>: a referência guardada se ela
@@ -40,20 +53,38 @@ namespace MantosExtract.Interop
         private object? ResolveTracked(string key)
         {
             bool hasId = _trackedIds.TryGetValue(key, out int wantedId);
-            if (_trackedShapes.TryGetValue(key, out object? reference) && reference != null)
+            bool hasReference = _trackedShapes.TryGetValue(key, out object? reference) && reference != null;
+            string prefix = "resolver '" + key + "' (id esperado=" + (hasId ? wantedId.ToString() : "nenhum") + "): ";
+            if (!hasReference && !hasId)
+            {
+                InteropLog.Write(prefix + "NUNCA foi rastreada nesta sessão | rastreados: " + TrackedSummary());
+                return null;
+            }
+            if (hasReference)
             {
                 try
                 {
-                    dynamic d = reference;
+                    dynamic d = reference!;
                     int id = (int)d.StaticID;
                     double probe = (double)d.LeftX; // lança se o shape foi apagado
-                    if (!hasId || id == wantedId) return reference;
+                    if (!hasId || id == wantedId)
+                    {
+                        InteropLog.Write(prefix + "referência viva -> " + InteropLog.ShapeInfo(reference));
+                        return reference;
+                    }
+                    InteropLog.Write(prefix + "referência aponta pra OUTRO shape (id=" + id + "), procurando pelo id");
                 }
-                catch { /* referência morta — procura pelo ID */ }
+                catch (Exception ex)
+                {
+                    InteropLog.Write(prefix + "referência morta (" + InteropLog.Describe(ex) + "), procurando pelo id");
+                }
             }
             if (!hasId) return null;
 
             object? found = FindShapeByStaticId(wantedId);
+            InteropLog.Write(prefix + (found != null
+                ? "reencontrada -> " + InteropLog.ShapeInfo(found)
+                : "NÃO existe em nenhuma página | rastreados: " + TrackedSummary()));
             if (found != null) _trackedShapes[key] = found;
             return found;
         }
@@ -61,29 +92,36 @@ namespace MantosExtract.Interop
         private object? FindShapeByStaticId(int staticId)
         {
             dynamic doc;
-            try { doc = _app.ActiveDocument; } catch { return null; }
+            try { doc = _app.ActiveDocument; }
+            catch (Exception ex) { InteropLog.Write("buscar id " + staticId + ": sem documento ativo (" + InteropLog.Describe(ex) + ")"); return null; }
 
             // Varredura dos shapes de topo de cada página — sem parâmetro opcional de COM nenhum.
             try
             {
                 dynamic pages = doc.Pages;
                 int pageCount = (int)pages.Count;
+                var seen = new List<string>();
                 for (int p = 1; p <= pageCount; p++)
                 {
                     dynamic shapes = pages[p].Shapes;
                     int count = (int)shapes.Count;
+                    var ids = new List<string>();
                     for (int i = 1; i <= count; i++)
                     {
                         try
                         {
                             dynamic s = shapes[i];
-                            if ((int)s.StaticID == staticId) return (object)s;
+                            int sid = (int)s.StaticID;
+                            if (sid == staticId) return (object)s;
+                            ids.Add(sid.ToString());
                         }
-                        catch { }
+                        catch { ids.Add("?"); }
                     }
+                    seen.Add("pág " + p + ": [" + string.Join(",", ids) + "]");
                 }
+                InteropLog.Write("buscar id " + staticId + ": fora dos shapes de topo; ids vistos " + string.Join(" ", seen));
             }
-            catch { }
+            catch (Exception ex) { InteropLog.Write("buscar id " + staticId + ": varredura falhou (" + InteropLog.Describe(ex) + ")"); }
 
             // Peça dentro de um grupo: IVGPage.FindShape(Name?, Type?, StaticID?, Recursive?)
             // (typelib) com os opcionais não usados como Missing, recursivo.
@@ -99,7 +137,7 @@ namespace MantosExtract.Interop
                     if (s != null) return s;
                 }
             }
-            catch { }
+            catch (Exception ex) { InteropLog.Write("buscar id " + staticId + ": FindShape recursivo falhou (" + InteropLog.Describe(ex) + ")"); }
             return null;
         }
 
@@ -176,7 +214,8 @@ namespace MantosExtract.Interop
                        " transparente=" + transparent + " recortado=" + (bool)bmp.Cropped +
                        " vinculado=" + (bool)bmp.ExternallyLinked;
             }
-            catch (Exception ex) { info = "atributos do bitmap ilegíveis (" + ex.Message + ")"; }
+            catch (Exception ex) { info = "atributos do bitmap ilegíveis (" + InteropLog.Describe(ex) + ")"; }
+            info = InteropLog.ShapeInfo((object)shape) + " | " + info;
 
             // IVGBitmap.SaveAs(FileName, Filter, Compression?) — confirmado na typelib. Todos os
             // parâmetros explícitos via InvokeMember (omitir opcional em COM já quebrou Import com
@@ -204,8 +243,8 @@ namespace MantosExtract.Interop
             if (transparent || saveAsError != null || !System.IO.File.Exists(pngPath))
             {
                 via = "exportação da seleção" + (saveAsError != null
-                    ? " (SaveAs falhou: " + (saveAsError.InnerException?.Message ?? saveAsError.Message) + ")"
-                    : "");
+                    ? " (SaveAs falhou: " + InteropLog.Describe(saveAsError) + ")"
+                    : transparent ? " (bitmap transparente, SaveAs pulado)" : " (SaveAs não gravou arquivo)");
                 int dpi = 300;
                 try
                 {
@@ -223,7 +262,7 @@ namespace MantosExtract.Interop
                 {
                     throw new InvalidOperationException(
                         "Não consegui ler a imagem selecionada [" + info + "]: " + via +
-                        " também falhou (" + exportEx.Message + ").", exportEx);
+                        " também falhou (" + InteropLog.Describe(exportEx) + ").", exportEx);
                 }
             }
 
@@ -231,7 +270,7 @@ namespace MantosExtract.Interop
                 throw new InvalidOperationException("O CorelDRAW não gravou a imagem selecionada (" + pngPath + ") [" + info + "].");
 
             Track(trackKey, (object)shape);
-            return info + " via " + via;
+            return info + " via " + via + " -> " + InteropLog.PngInfo(pngPath);
         }
 
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ImportPng(string pngPath)
@@ -268,17 +307,22 @@ namespace MantosExtract.Interop
 
         public void TrackLastImportedShape(string key)
         {
-            if (_lastImportedShape == null || string.IsNullOrEmpty(key)) return;
+            if (_lastImportedShape == null || string.IsNullOrEmpty(key))
+            {
+                InteropLog.Write("rastrear '" + key + "': ignorado (nenhuma peça importada ainda)");
+                return;
+            }
             // `!`: o null-check acima já garante, mas a análise de fluxo não atravessa `dynamic?`.
             Track(key, (object)_lastImportedShape!);
         }
 
         public bool ReplaceTrackedShape(string key, string pngPath)
         {
+            using var _ = new CorelDocumentState(_app);
+            InteropLog.Write("trocar '" + key + "' por " + System.IO.Path.GetFileName(pngPath) + " (" + InteropLog.PngInfo(pngPath) + ")");
+
             object? tracked = ResolveTracked(key);
             if (tracked == null) return false;
-
-            using var _ = new CorelDocumentState(_app);
 
             // Lê a geometria do antigo ANTES de importar qualquer coisa: se ele foi apagado à mão
             // pelo operador, isso lança e a gente sai SEM ter jogado uma segunda cópia na página.
@@ -291,8 +335,9 @@ namespace MantosExtract.Interop
                 widthMm = (double)old.SizeWidth;
                 heightMm = (double)old.SizeHeight;
             }
-            catch
+            catch (Exception ex)
             {
+                InteropLog.Write("trocar '" + key + "': geometria do antigo ilegível (" + InteropLog.Describe(ex) + ")");
                 return false;
             }
 
@@ -317,13 +362,20 @@ namespace MantosExtract.Interop
             }
             catch (Exception ex)
             {
+                InteropLog.Write("trocar '" + key + "': encaixe falhou, nova=" + InteropLog.ShapeInfo((object)imported) + " (" + InteropLog.Describe(ex) + ")");
                 throw new InvalidOperationException(
                     "A versão em alta resolução entrou, mas não consegui encaixá-la no lugar da anterior: " + ex.Message, ex);
             }
 
+            string oldInfo = InteropLog.ShapeInfo(tracked);
             try { ((dynamic)tracked).Delete(); }
-            catch { /* a nova já está no lugar certo; uma sobra invisível não justifica falhar */ }
+            catch (Exception ex)
+            {
+                // a nova já está no lugar certo; uma sobra invisível não justifica falhar
+                InteropLog.Write("trocar '" + key + "': não consegui apagar o antigo (" + InteropLog.Describe(ex) + ")");
+            }
 
+            InteropLog.Write("trocar '" + key + "': antigo " + oldInfo + " -> novo " + InteropLog.ShapeInfo((object)imported));
             Track(key, (object)imported);
             return true;
         }

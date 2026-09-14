@@ -23,12 +23,23 @@ namespace MantosExtract.Interop
         public static void ExportSelectionToPng(dynamic application, dynamic document, string path, int dpi,
                                                 bool transparent = false)
         {
-            try { ExportViaStructOptions(application, document, path, dpi, transparent); }
+            string what = "exportar seleção " + System.IO.Path.GetFileName(path) + " " + dpi + "dpi transparente=" + transparent;
+            try
+            {
+                ExportViaStructOptions(application, document, path, dpi, transparent);
+                InteropLog.Write(what + " via ExportEx -> " + InteropLog.PngInfo(path));
+            }
             catch (Exception primaryEx)
             {
-                try { ExportViaBitmapFallback(document, path, dpi, transparent); }
+                InteropLog.Write(what + ": ExportEx falhou (" + InteropLog.Describe(primaryEx) + "), tentando ExportBitmap");
+                try
+                {
+                    ExportViaBitmapFallback(document, path, dpi, transparent);
+                    InteropLog.Write(what + " via ExportBitmap -> " + InteropLog.PngInfo(path));
+                }
                 catch (Exception fallbackEx)
                 {
+                    InteropLog.Write(what + ": ExportBitmap também falhou (" + InteropLog.Describe(fallbackEx) + ")");
                     throw new InvalidOperationException(
                         "Falha ao exportar a seleção para PNG: " + Root(primaryEx).Message +
                         " (fallback também falhou: " + Root(fallbackEx).Message + ")", primaryEx);

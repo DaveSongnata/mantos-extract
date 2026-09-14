@@ -43,10 +43,24 @@ namespace MantosExtract.Interop
             // Primeiro pela diferença de StaticID (definitivo); a seleção só como último recurso,
             // e só se a leitura dos IDs de antes falhou — nunca devolve uma peça que já existia.
             dynamic? imported = idsBefore != null ? FindNewShape(layer, idsBefore) : null;
-            if (imported == null && idsBefore == null) imported = ResolveImportedShape(document, layer);
+            string how = "diferença de StaticID";
+            if (imported == null && idsBefore == null)
+            {
+                imported = ResolveImportedShape(document, layer);
+                how = "seleção/último da camada (ids de antes ilegíveis)";
+            }
+            string layerName = "?";
+            try { layerName = (string)layer.Name; } catch { }
             if (imported == null)
+            {
+                InteropLog.Write("importar " + System.IO.Path.GetFileName(pngPath) + ": NENHUM shape novo na camada \"" + layerName +
+                                 "\" | antes=[" + (idsBefore != null ? string.Join(",", idsBefore) : "ilegível") +
+                                 "] depois=[" + Join(ReadStaticIds(layer)) + "]");
                 throw new InvalidOperationException(
                     "A imagem foi importada, mas não consegui localizar o objeto criado.");
+            }
+            InteropLog.Write("importar " + System.IO.Path.GetFileName(pngPath) + " na camada \"" + layerName + "\" via " + how +
+                             ": " + InteropLog.ShapeInfo((object)imported) + " | shapes antes=" + (idsBefore?.Count.ToString() ?? "?"));
             return imported;
         }
 
@@ -91,8 +105,14 @@ namespace MantosExtract.Interop
                 for (int i = 1; i <= count; i++) ids.Add((int)shapes[i].StaticID);
                 return ids;
             }
-            catch { return null; }
+            catch (Exception ex)
+            {
+                InteropLog.Write("importar: StaticIDs da camada ilegíveis (" + InteropLog.Describe(ex) + ")");
+                return null;
+            }
         }
+
+        private static string Join(List<int>? ids) => ids == null ? "ilegível" : string.Join(",", ids);
 
         private static dynamic? FindNewShape(dynamic layer, List<int> idsBefore)
         {
