@@ -21,6 +21,88 @@ namespace MantosExtract.Interop
         // tela de resultado representa, mesmo que o operador tenha renomeado ou movido ela.
         private readonly Dictionary<string, object> _trackedShapes = new Dictionary<string, object>();
 
+        // StaticID de cada shape rastreado: identidade estável no documento. A referência COM
+        // acima é só o atalho — se ela estiver inválida ou apontar pra OUTRO shape, a peça é
+        // procurada pelo ID nas páginas (bug real 2026-09-13: "a peça não está mais no documento"
+        // com a peça ali, porque a referência apontava pra um shape já trocado).
+        private readonly Dictionary<string, int> _trackedIds = new Dictionary<string, int>();
+
+        private void Track(string key, object shape)
+        {
+            _trackedShapes[key] = shape;
+            try { _trackedIds[key] = (int)((dynamic)shape).StaticID; }
+            catch { _trackedIds.Remove(key); }
+        }
+
+        /// <summary>O shape vivo da peça <paramref name="key"/>: a referência guardada se ela
+        /// ainda for válida E tiver o mesmo StaticID; senão, busca pelo StaticID em todas as
+        /// páginas. Null só se a peça realmente não existe mais.</summary>
+        private object? ResolveTracked(string key)
+        {
+            bool hasId = _trackedIds.TryGetValue(key, out int wantedId);
+            if (_trackedShapes.TryGetValue(key, out object? reference) && reference != null)
+            {
+                try
+                {
+                    dynamic d = reference;
+                    int id = (int)d.StaticID;
+                    double probe = (double)d.LeftX; // lança se o shape foi apagado
+                    if (!hasId || id == wantedId) return reference;
+                }
+                catch { /* referência morta — procura pelo ID */ }
+            }
+            if (!hasId) return null;
+
+            object? found = FindShapeByStaticId(wantedId);
+            if (found != null) _trackedShapes[key] = found;
+            return found;
+        }
+
+        private object? FindShapeByStaticId(int staticId)
+        {
+            dynamic doc;
+            try { doc = _app.ActiveDocument; } catch { return null; }
+
+            // Varredura dos shapes de topo de cada página — sem parâmetro opcional de COM nenhum.
+            try
+            {
+                dynamic pages = doc.Pages;
+                int pageCount = (int)pages.Count;
+                for (int p = 1; p <= pageCount; p++)
+                {
+                    dynamic shapes = pages[p].Shapes;
+                    int count = (int)shapes.Count;
+                    for (int i = 1; i <= count; i++)
+                    {
+                        try
+                        {
+                            dynamic s = shapes[i];
+                            if ((int)s.StaticID == staticId) return (object)s;
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+
+            // Peça dentro de um grupo: IVGPage.FindShape(Name?, Type?, StaticID?, Recursive?)
+            // (typelib) com os opcionais não usados como Missing, recursivo.
+            try
+            {
+                dynamic pages = doc.Pages;
+                int pageCount = (int)pages.Count;
+                for (int p = 1; p <= pageCount; p++)
+                {
+                    object page = pages[p];
+                    object? s = page.GetType().InvokeMember("FindShape", System.Reflection.BindingFlags.InvokeMethod, null, page,
+                        new object[] { System.Reflection.Missing.Value, System.Reflection.Missing.Value, staticId, true });
+                    if (s != null) return s;
+                }
+            }
+            catch { }
+            return null;
+        }
+
         public CorelHost(dynamic corelApplication)
         {
             _app = corelApplication;
@@ -86,16 +168,47 @@ namespace MantosExtract.Interop
             // IVGBitmap.SaveAs(FileName, Filter, Compression?) — confirmado na typelib. Todos os
             // parâmetros explícitos via InvokeMember (omitir opcional em COM já quebrou Import com
             // DISP_E_TYPEMISMATCH). Devolve um ExportFilter que precisa de Finish().
-            object bitmap = shape.Bitmap;
-            object? filter = bitmap.GetType().InvokeMember("SaveAs", System.Reflection.BindingFlags.InvokeMethod,
-                null, bitmap, new object[] { pngPath, CorelConstants.CdrFilterPng, CorelConstants.CdrCompressionNone });
-            if (filter != null)
-                filter.GetType().InvokeMember("Finish", System.Reflection.BindingFlags.InvokeMethod, null, filter, Array.Empty<object>());
+            Exception? saveAsError = null;
+            try
+            {
+                object bitmap = shape.Bitmap;
+                object? filter = bitmap.GetType().InvokeMember("SaveAs", System.Reflection.BindingFlags.InvokeMethod,
+                    null, bitmap, new object[] { pngPath, CorelConstants.CdrFilterPng, CorelConstants.CdrCompressionNone });
+                if (filter != null)
+                    filter.GetType().InvokeMember("Finish", System.Reflection.BindingFlags.InvokeMethod, null, filter, Array.Empty<object>());
+            }
+            catch (Exception ex) { saveAsError = ex; }
+
+            // Segunda via: o SaveAs do bitmap devolveu E_FAIL na máquina real (2026-09-13) em
+            // algumas imagens. Exporta a SELEÇÃO com transparência, no dpi que reproduz os pixels
+            // nativos do bitmap (pixels / polegadas na página), pra não perder resolução.
+            if (saveAsError != null || !System.IO.File.Exists(pngPath))
+            {
+                int dpi = 300;
+                try
+                {
+                    int px = (int)shape.Bitmap.SizeWidth;             // IVGBitmap.SizeWidth (pixels)
+                    double inches = (double)shape.SizeWidth / 25.4;    // CorelDocumentState: mm
+                    if (px > 0 && inches > 0) dpi = (int)Math.Round(px / inches);
+                    if (dpi < 72) dpi = 72;
+                    if (dpi > 2400) dpi = 2400;
+                }
+                catch { /* mantém 300 */ }
+
+                try { CorelExporter.ExportSelectionToPng(_app, _app.ActiveDocument, pngPath, dpi, transparent: true); }
+                catch (Exception exportEx)
+                {
+                    throw new InvalidOperationException(
+                        "Não consegui ler a imagem selecionada: SaveAs do bitmap falhou (" +
+                        (saveAsError?.InnerException?.Message ?? saveAsError?.Message ?? "sem arquivo") +
+                        ") e a exportação da seleção também (" + exportEx.Message + ").", exportEx);
+                }
+            }
 
             if (!System.IO.File.Exists(pngPath))
                 throw new InvalidOperationException("O CorelDRAW não gravou a imagem selecionada (" + pngPath + ").");
 
-            _trackedShapes[trackKey] = (object)shape;
+            Track(trackKey, (object)shape);
         }
 
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ImportPng(string pngPath)
@@ -134,12 +247,13 @@ namespace MantosExtract.Interop
         {
             if (_lastImportedShape == null || string.IsNullOrEmpty(key)) return;
             // `!`: o null-check acima já garante, mas a análise de fluxo não atravessa `dynamic?`.
-            _trackedShapes[key] = (object)_lastImportedShape!;
+            Track(key, (object)_lastImportedShape!);
         }
 
         public bool ReplaceTrackedShape(string key, string pngPath)
         {
-            if (!_trackedShapes.TryGetValue(key, out object? tracked) || tracked == null) return false;
+            object? tracked = ResolveTracked(key);
+            if (tracked == null) return false;
 
             using var _ = new CorelDocumentState(_app);
 
@@ -156,7 +270,6 @@ namespace MantosExtract.Interop
             }
             catch
             {
-                _trackedShapes.Remove(key);
                 return false;
             }
 
@@ -188,7 +301,7 @@ namespace MantosExtract.Interop
             try { ((dynamic)tracked).Delete(); }
             catch { /* a nova já está no lugar certo; uma sobra invisível não justifica falhar */ }
 
-            _trackedShapes[key] = (object)imported;
+            Track(key, (object)imported);
             return true;
         }
 

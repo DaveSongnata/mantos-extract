@@ -20,12 +20,13 @@ namespace MantosExtract.Interop
         /// <summary>Exports the active selection to <paramref name="path"/> as PNG at
         /// <paramref name="dpi"/>. Throws on failure — the caller (bridge) turns that into a
         /// pt-BR message, same as every other COM entry point in this add-in.</summary>
-        public static void ExportSelectionToPng(dynamic application, dynamic document, string path, int dpi)
+        public static void ExportSelectionToPng(dynamic application, dynamic document, string path, int dpi,
+                                                bool transparent = false)
         {
-            try { ExportViaStructOptions(application, document, path, dpi); }
+            try { ExportViaStructOptions(application, document, path, dpi, transparent); }
             catch (Exception primaryEx)
             {
-                try { ExportViaBitmapFallback(document, path, dpi); }
+                try { ExportViaBitmapFallback(document, path, dpi, transparent); }
                 catch (Exception fallbackEx)
                 {
                     throw new InvalidOperationException(
@@ -35,14 +36,15 @@ namespace MantosExtract.Interop
             }
         }
 
-        private static void ExportViaStructOptions(dynamic application, dynamic document, string path, int dpi)
+        private static void ExportViaStructOptions(dynamic application, dynamic document, string path, int dpi,
+                                                   bool transparent)
         {
             dynamic opts = application.CreateStructExportOptions();
             opts.ImageType = CorelConstants.CdrImageTypeRgb;
             opts.ResolutionX = dpi;
             opts.ResolutionY = dpi;
             opts.AntiAliasingType = CorelConstants.CdrNormalAntiAliasing;
-            try { opts.Transparent = false; } catch { /* not every host version exposes it */ }
+            try { opts.Transparent = transparent; } catch { /* not every host version exposes it */ }
             opts.Overwrite = true;
 
             dynamic pal = application.CreateStructPaletteOptions();
@@ -57,7 +59,7 @@ namespace MantosExtract.Interop
         /// <summary>14-arg ExportBitmap, primitives only — the fallback the sibling repos
         /// already proved necessary when ExportEx's struct binding fails on a given Corel
         /// build.</summary>
-        private static void ExportViaBitmapFallback(dynamic document, string path, int dpi)
+        private static void ExportViaBitmapFallback(dynamic document, string path, int dpi, bool transparent)
         {
             Finish(InvokeMember((object)document, "ExportBitmap", new object[]
             {
@@ -65,7 +67,7 @@ namespace MantosExtract.Interop
                 CorelConstants.CdrImageTypeRgb,
                 0, 0, 0, 0, // Left/Top/SizeX/SizeY = 0 -> whole selection bbox
                 dpi, dpi,
-                false, // Transparent
+                transparent, // Transparent
                 false, // OnlySelected (range already limits to selection)
                 CorelConstants.CdrNormalAntiAliasing,
                 CorelConstants.CdrPaletteOptimized,

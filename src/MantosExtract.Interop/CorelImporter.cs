@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
+using MantosExtract.Core.Layout;
 
 namespace MantosExtract.Interop
 {
@@ -24,6 +26,7 @@ namespace MantosExtract.Interop
         public static dynamic Import(dynamic application, dynamic document, string pngPath)
         {
             dynamic layer = document.ActiveLayer;
+            List<int>? idsBefore = ReadStaticIds(layer);
 
             // Bug fix (Dave, 2026-09-07 — confirmed by real docker.log on the VM):
             // "COMException: Type mismatch (DISP_E_TYPEMISMATCH)" on every single Import call.
@@ -37,7 +40,10 @@ namespace MantosExtract.Interop
             InvokeMember((object)layer, "Import",
                 new object[] { pngPath, CorelConstants.CdrFilterPng, (object)options });
 
-            dynamic? imported = ResolveImportedShape(document, layer);
+            // Primeiro pela diferença de StaticID (definitivo); a seleção só como último recurso,
+            // e só se a leitura dos IDs de antes falhou — nunca devolve uma peça que já existia.
+            dynamic? imported = idsBefore != null ? FindNewShape(layer, idsBefore) : null;
+            if (imported == null && idsBefore == null) imported = ResolveImportedShape(document, layer);
             if (imported == null)
                 throw new InvalidOperationException(
                     "A imagem foi importada, mas não consegui localizar o objeto criado.");
@@ -71,6 +77,30 @@ namespace MantosExtract.Interop
             catch { /* nothing we can do */ }
 
             return null;
+        }
+
+        /// <summary>StaticIDs dos shapes de topo da camada, na ordem da coleção. Null se não deu
+        /// pra ler (aí o chamador cai na seleção, como era antes).</summary>
+        private static List<int>? ReadStaticIds(dynamic layer)
+        {
+            try
+            {
+                dynamic shapes = layer.Shapes;
+                int count = (int)shapes.Count;
+                var ids = new List<int>(count);
+                for (int i = 1; i <= count; i++) ids.Add((int)shapes[i].StaticID);
+                return ids;
+            }
+            catch { return null; }
+        }
+
+        private static dynamic? FindNewShape(dynamic layer, List<int> idsBefore)
+        {
+            List<int>? after = ReadStaticIds(layer);
+            if (after == null) return null;
+            int index = ImportedShapeResolver.IndexOfNewShape(new HashSet<int>(idsBefore), after, preferredIndex: 0);
+            if (index < 0) return null;
+            try { return layer.Shapes[index + 1]; } catch { return null; }
         }
 
         private static object? InvokeMember(object com, string method, object[] args) =>
