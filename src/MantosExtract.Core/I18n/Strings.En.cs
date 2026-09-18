@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace MantosExtract.Core.I18n
 {
@@ -122,6 +122,10 @@ namespace MantosExtract.Core.I18n
             ["me.home.upscale.errorSelection"] = "Could not read the selected image in CorelDRAW.",
             ["me.extract.result.copyrightTitle"] = "Copyright notice",
             ["me.extract.result.copyrightOk"] = "Got it",
+            ["me.extract.result.legacyTitle"] = "Image model unavailable",
+            ["me.extract.result.legacyBody"] = "Your OpenAI key does not have access to the latest image model yet. You can continue with the previous model: it works the same way, but with slightly lower quality.",
+            ["me.extract.result.legacyUse"] = "Use previous model",
+            ["me.extract.result.legacyCancel"] = "Not now",
             ["me.result.upscale.errorGone"] = "The piece is no longer in the document — the high-res file was kept in the folder.",
 
             ["me.error.network.title"] = "We couldn't connect",

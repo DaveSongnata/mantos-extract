@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -27,7 +27,7 @@ namespace MantosExtract.AddIn.Ui
     /// WebView2, wires its <see cref="CoreWebView2"/> to one of these, and stays dumb — same
     /// split as Optimus.AddIn.Ui.OptimusBridge, which this mirrors structurally.
     /// </summary>
-    public sealed class MantosExtractBridge
+    public sealed partial class MantosExtractBridge
     {
         private readonly CoreWebView2 _core;
         private readonly ICorelHost _corel;
@@ -55,6 +55,11 @@ namespace MantosExtract.AddIn.Ui
         private readonly IExtractionClient _extractionClient = new ExtractionClient();
         private readonly UpscalePaths _upscalePaths = UpscalePaths.Resolve();
         private readonly UpscaleRunner _upscaleRunner;
+
+        // Modelo anterior (gpt-image-2) aceito pelo operador no modal (Dave, 2026-09-18): a chave
+        // BYOK dele não tem acesso ao GPT Image 2.5. Vale só enquanto o docker está aberto e é
+        // zerado ao trocar a chave — quem ganhar acesso depois volta a usar o modelo novo.
+        private bool _useLegacyImageModel;
 
         // PNG final de cada elemento extraído neste lote, por id — o upscale opcional (Dave,
         // 2026-09-11) roda em cima DESTE arquivo bem depois da extração, quando/se o operador
@@ -164,6 +169,7 @@ namespace MantosExtract.AddIn.Ui
                     case "logout": RunAsync(async ct => PostAuth(await _auth.LogoutAsync(ct))); break;
 
                     case "saveOpenAiKey": SaveOpenAiKey(openAiKey); break;
+                    case "useLegacyModel": _useLegacyImageModel = true; MantosExtractLog.Write("Modelo anterior aceito pelo operador"); break;
                     case "saveExtractionQuality": SaveExtractionQuality(extractionQuality); break;
                     case "changePassword": RunAsync(ct => ChangePasswordAsync(currentPassword, newPassword, ct)); break;
 
@@ -287,11 +293,13 @@ namespace MantosExtract.AddIn.Ui
                 if (string.IsNullOrWhiteSpace(key))
                 {
                     _credentials.ClearOpenAiKey();
+                    _useLegacyImageModel = false;
                     Post(new { type = "openaiKey", ok = true, saved = false });
                     return;
                 }
 
                 _credentials.SaveOpenAiKey(key);
+                _useLegacyImageModel = false;
                 Post(new { type = "openaiKey", ok = true, saved = true });
             }
             catch (Exception ex)
@@ -474,10 +482,11 @@ namespace MantosExtract.AddIn.Ui
 
             int succeeded = 0, failed = 0;
 
-            // Preenchido quando a conta OpenAI do cliente fica sem crédito / bate teto de gasto no
-            // meio do lote: o lote para ali e a tela de resultado mostra ESTA mensagem, em vez de
+            // Preenchido quando a conta OpenAI do cliente fica sem crédito / bate teto de gasto, ou
+            // quando a chave não tem acesso ao modelo novo, no meio do lote: o lote para ali e a
+            // tela de resultado mostra ESTA mensagem (ou o modal do modelo anterior), em vez de
             // uma coluna de "falhou" sem explicação.
-            MantosExtractApiException? quotaStop = null;
+            MantosExtractApiException? batchStop = null;
 
             for (int i = 0; i < confirmed.Count; i++)
             {
@@ -516,7 +525,7 @@ namespace MantosExtract.AddIn.Ui
                     ExtractedImage extracted = await _extractionClient
                         .ExtractAsync(session.SessionId, openAiKey!, extractionQuality,
                                        _lastExportedImageBytes, _lastExportedMimeType,
-                                       element.Box, element.Label, elementCts.Token)
+                                       element.Box, element.Label, elementCts.Token, _useLegacyImageModel)
                         .ConfigureAwait(false);
 
                     // Sem upscale aqui (Dave, 2026-09-11): a extração entrega DIRETO, e o upscale
@@ -551,11 +560,12 @@ namespace MantosExtract.AddIn.Ui
                     { Id = element.Id, Label = element.Label, FileName = null, Ok = false });
                     Post(new { type = "extractProgress", id = element.Id, index = i, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
 
-                    if (ex.IsOpenAiQuotaExhausted)
+                    if (ex.StopsBatch)
                     {
-                        // Sem crédito, todas as próximas chamadas falhariam igual (e a OpenAI diz
-                        // que retentar não resolve): encerra o lote aqui marcando o resto.
-                        quotaStop = ex;
+                        // Sem crédito (a OpenAI diz que retentar não resolve) ou sem acesso ao
+                        // modelo novo: todas as próximas chamadas falhariam igual — encerra o lote
+                        // aqui marcando o resto.
+                        batchStop = ex;
                         for (int rest = i + 1; rest < confirmed.Count; rest++)
                         {
                             DetectedElement skipped = confirmed[rest];
@@ -565,7 +575,7 @@ namespace MantosExtract.AddIn.Ui
                             { Id = skipped.Id, Label = skipped.Label, FileName = null, Ok = false });
                             Post(new { type = "extractProgress", id = skipped.Id, index = rest, total = confirmed.Count, stage = "done", ok = false, code = ex.Code, error = ex.Message });
                         }
-                        MantosExtractLog.Write("Lote interrompido: conta OpenAI sem crédito/limite (" + ex.Code + ")");
+                        MantosExtractLog.Write("Lote interrompido (" + ex.Code + ")");
                         break;
                     }
                 }
@@ -605,7 +615,7 @@ namespace MantosExtract.AddIn.Ui
             // (_corel.ImportPng/MoveLastImportedShape mexem no documento ativo). "Dois fluxos" aqui
             // significa dois CAMINHOS DE CÓDIGO separados (ExtractOneBackgroundAsync nunca toca
             // no loop acima), não duas threads simultâneas.
-            if (wantsBackground && quotaStop != null)
+            if (wantsBackground && batchStop != null)
             {
                 // Lote já parou por falta de crédito: o fundo nem é tentado.
                 if (!_skipElementIds.Remove(BackgroundElementId))
@@ -613,7 +623,7 @@ namespace MantosExtract.AddIn.Ui
                     failed++;
                     manifestElements.Add(new ExtractionBatchManifestElement
                     { Id = BackgroundElementId, Label = L("me.select.backgroundLabel"), FileName = null, Ok = false });
-                    Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = false, code = quotaStop.Code, error = quotaStop.Message });
+                    Post(new { type = "extractProgress", id = BackgroundElementId, stage = "done", ok = false, code = batchStop.Code, error = batchStop.Message });
                 }
             }
             else if (wantsBackground && !ct.IsCancellationRequested)
@@ -622,7 +632,7 @@ namespace MantosExtract.AddIn.Ui
                     session, openAiKey!, extractionQuality, batchDir, pageBounds, placedThisBatch,
                     manifestElements, ct,
                     onSucceeded: () => succeeded++, onFailed: () => failed++,
-                    onQuotaExhausted: ex => quotaStop = ex
+                    onQuotaExhausted: ex => batchStop = ex
                 ).ConfigureAwait(false);
             }
 
@@ -646,7 +656,7 @@ namespace MantosExtract.AddIn.Ui
                 " exe=" + _upscalePaths.ExecutablePath + " (" + (_upscalePaths.ExecutableExists ? "ok" : "AUSENTE") + ")");
 
             Post(new { type = "extract", done = true, succeeded, failed, canUpscale,
-                       code = quotaStop?.Code, error = quotaStop?.Message });
+                       code = batchStop?.Code, error = batchStop?.Message });
         }
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — processa o item especial sentinela
@@ -679,7 +689,7 @@ namespace MantosExtract.AddIn.Ui
             {
                 ExtractedImage extracted = await _extractionClient
                     .ExtractBackgroundAsync(session.SessionId, openAiKey, extractionQuality,
-                                   _lastExportedImageBytes!, _lastExportedMimeType, bgCts.Token)
+                                   _lastExportedImageBytes!, _lastExportedMimeType, bgCts.Token, _useLegacyImageModel)
                     .ConfigureAwait(false);
 
                 // Igual ao loop de elementos: entrega direto, upscale só sob demanda depois.
@@ -705,7 +715,7 @@ namespace MantosExtract.AddIn.Ui
                 MantosExtractLog.Write("ExtractBackground FAILED (" + ex.Code + "): " + ex.Message);
 
                 if (ex.Code == "E_UNAUTHORIZED") { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
-                if (ex.IsOpenAiQuotaExhausted) onQuotaExhausted?.Invoke(ex);
+                if (ex.StopsBatch) onQuotaExhausted?.Invoke(ex);
 
                 onFailed();
                 manifestElements.Add(new ExtractionBatchManifestElement

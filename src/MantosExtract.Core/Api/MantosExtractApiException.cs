@@ -23,5 +23,14 @@ namespace MantosExtract.Core.Api
 
         public static bool IsOpenAiQuotaCode(string? code) =>
             code == "E_OPENAI_NO_CREDIT" || code == "E_OPENAI_SPEND_LIMIT";
+
+        /// <summary>A chave OpenAI do cliente (BYOK) não tem acesso ao modelo de imagem novo
+        /// (GPT Image 2.5). O addin oferece, num modal, usar o modelo anterior (Dave,
+        /// 2026-09-18) — nunca troca sozinho, porque a qualidade muda.</summary>
+        public bool IsOpenAiModelUnavailable => Code == "E_OPENAI_MODEL_UNAVAILABLE";
+
+        /// <summary>Falha que se repetiria igual em todas as peças seguintes do lote — o lote
+        /// para em vez de colher o mesmo erro peça por peça.</summary>
+        public bool StopsBatch => IsOpenAiQuotaExhausted || IsOpenAiModelUnavailable;
     }
 }

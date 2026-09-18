@@ -172,5 +172,76 @@ namespace MantosExtract.Core.Tests.Extract
 
             Assert.Equal("medium", capturedQualityHeader);
         }
+
+        [Fact]
+        public async Task ExtractAsync_LegacyModelFlag_SendsFlagHeaderNeverAModelName()
+        {
+            var headers = new System.Collections.Generic.Dictionary<string, string>();
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    foreach (var h in req.Headers) headers[h.Key] = string.Join(",", h.Value);
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/abc""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.ExtractAsync("s1", "key", "medium", new byte[] { 9 }, "image/png",
+                new BoundingBox(1, 2, 3, 4), "logo", CancellationToken.None, legacyModel: true);
+
+            Assert.Equal("1", headers["X-Extract-Legacy-Model"]);
+            Assert.False(headers.ContainsKey("X-OpenAI-Model"), "o cliente nunca manda nome de modelo");
+        }
+
+        [Fact]
+        public async Task ExtractAsync_DefaultsToNoLegacyHeader()
+        {
+            bool hasLegacyHeader = true;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    hasLegacyHeader = req.Headers.Contains("X-Extract-Legacy-Model");
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/abc""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.ExtractAsync("s1", "key", "medium", new byte[] { 9 }, "image/png",
+                new BoundingBox(1, 2, 3, 4), "logo", CancellationToken.None);
+
+            Assert.False(hasLegacyHeader);
+        }
+
+        [Fact]
+        public async Task ExtractAsync_ModelUnavailable_SurfacesServerCodeAndMessage()
+        {
+            var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage((HttpStatusCode)422)
+            {
+                Content = new StringContent(
+                    @"{""code"":""E_OPENAI_MODEL_UNAVAILABLE"",""message"":""Sua chave ainda nao tem acesso.""}",
+                    Encoding.UTF8, "application/json"),
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            var ex = await Assert.ThrowsAsync<MantosExtractApiException>(() =>
+                client.ExtractAsync("s1", "key", "medium", new byte[] { 1 }, "image/png",
+                    new BoundingBox(1, 2, 3, 4), "logo", CancellationToken.None));
+
+            Assert.Equal("E_OPENAI_MODEL_UNAVAILABLE", ex.Code);
+            Assert.True(ex.IsOpenAiModelUnavailable);
+            Assert.Equal("Sua chave ainda nao tem acesso.", ex.Message);
+        }
     }
 }

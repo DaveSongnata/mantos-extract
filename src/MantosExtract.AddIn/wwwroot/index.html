@@ -617,6 +617,14 @@
           <button type="button" id="copyrightModalOk" class="primary" data-i18n="me.extract.result.copyrightOk">Entendi</button>
         </div>
       </div>
+      <div id="legacyModelModal" class="modal-backdrop" hidden>
+        <div class="modal" role="alertdialog" aria-labelledby="legacyModelModalTitle">
+          <div class="bar"><span class="tab" aria-hidden="true"></span><span id="legacyModelModalTitle" data-i18n="me.extract.result.legacyTitle">Modelo de imagem indisponível</span></div>
+          <div class="modal-body" data-i18n="me.extract.result.legacyBody"></div>
+          <button type="button" id="legacyModelUse" class="primary" data-i18n="me.extract.result.legacyUse">Usar modelo anterior</button>
+          <button type="button" id="legacyModelCancel" class="secondary" data-i18n="me.extract.result.legacyCancel">Agora não</button>
+        </div>
+      </div>
       <div class="result-summary" id="resultSummary"></div>
       <div class="inline-error" id="resultUpscaleError" hidden></div>
       <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
@@ -1414,6 +1422,21 @@
     $("copyrightModalOk").focus();
   }
 
+  // Chave sem acesso ao GPT Image 2.5 (Dave, 2026-09-18): o lote parou e o operador decide se
+  // segue com o modelo anterior. "Usar" avisa o bridge (flag da sessão) e refaz só o que falhou;
+  // "Agora não" só fecha — a lista de motivos abaixo da tabela continua explicando o que houve.
+  function showLegacyModelModalIfNeeded(msg){
+    if (msg.code !== "E_OPENAI_MODEL_UNAVAILABLE") return;
+    $("legacyModelModal").hidden = false;
+    $("legacyModelUse").focus();
+  }
+  $("legacyModelUse").addEventListener("click", function(){
+    $("legacyModelModal").hidden = true;
+    send({cmd:"useLegacyModel"});
+    beginExtraction(state.lastFailedIds.slice());
+  });
+  $("legacyModelCancel").addEventListener("click", function(){ $("legacyModelModal").hidden = true; });
+
   function onExtractDone(msg){
     stopElapsed();
     var listEl = $("resultList");
@@ -1442,6 +1465,7 @@
     }
     $("resultUpscaleError").hidden = true;
     showCopyrightModalIfNeeded();
+    showLegacyModelModalIfNeeded(msg);
 
     Object.keys(state.extractProgress).forEach(function(id){
       var p = state.extractProgress[id];
