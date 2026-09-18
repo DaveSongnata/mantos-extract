@@ -91,6 +91,20 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   `openai_credentials.ts` (header primário, `OPENAI_API_KEY` só dev, 422 `E_MISSING_OPENAI_KEY`
   se ausente — nunca 401, pra não confundir com sessão expirada no front).
 
+## Geração de imagem — GPT Image 2.5 Flare, presets e refino (Dave, 2026-09-18)
+
+- **Modelo é constante do servidor** (`mantosfc/backend/app/services/mantos_extract_presets.ts`):
+  `gpt-image-2.5-flare-2026-09-08`. Nunca env (incidente de 2026-09-07) e nunca vindo do cliente.
+  Tamanho de saída também é do servidor: o MAIOR seguro pra proporção (nunca `auto`).
+- **Presets = `low`/`medium`/`high`/`xhigh`/`max`**, slider de 5 paradas nas Configurações; o addin
+  manda só o nome em `X-Extract-Preset`. Custo é da chave BYOK do operador (M2/M3 intactas).
+- **Sem acesso ao 2.5** (`E_OPENAI_MODEL_UNAVAILABLE`): modal pergunta se usa o modelo anterior
+  (`X-Extract-Legacy-Model: 1`, flag da sessão). Nunca é automático.
+- **Refino por prompt livre** (`POST /mantos-extract/refine`): qualquer bitmap selecionado no Corel,
+  cliente reenvia a imagem inteira, resultado entra AO LADO do original (`RefinePlacement`).
+  Lógica do Bridge em `MantosExtractBridge.Refine.cs` (partial — o Bridge principal passa de 900
+  linhas, dívida técnica aceita pelo Dave em 2026-09-18).
+
 ## Upscale — processo externo, não biblioteca embutida
 
 Real-ESRGAN NCNN-Vulkan (binário standalone, sem Python), invocado como **processo externo**

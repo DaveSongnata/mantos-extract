@@ -154,7 +154,20 @@
   .modal .bar{margin:0;}
   .modal-pieces{padding:0 12px;font-weight:900;text-transform:uppercase;font-size:11px;letter-spacing:.02em;}
   .modal-body{padding:0 12px;font-size:12px;line-height:1.45;}
-  .modal .primary{margin:0 12px;width:auto;}
+  .modal .primary,.modal .secondary{margin:0 12px;width:auto;}
+  /* Refino por prompt livre (Dave, 2026-09-18): sempre disponível na tela inicial. Mesmo idioma
+     dos campos de formulário — borda dura, raio zero, sem sombra. */
+  .home-refine{display:flex;flex-direction:column;gap:8px;border-top:var(--lw) solid var(--ink);padding-top:12px;}
+  .home-refine label{margin-bottom:0;}
+  .home-refine .help-text{margin:0;}
+  .home-refine textarea{
+    width:100%;min-height:64px;resize:vertical;background:var(--surface);
+    border:var(--lw) solid var(--ink);color:var(--ink);font-family:var(--font-body);
+    font-size:13px;padding:9px 10px;border-radius:0;
+  }
+  .home-refine textarea::placeholder{color:var(--gray);opacity:1;}
+  .home-refine textarea:focus-visible{outline:2px solid var(--accent-dark);outline-offset:0;}
+  .home-refine textarea:disabled{opacity:.5;}
   .home-upscale-running{display:flex;align-items:center;justify-content:center;gap:8px;
     font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.02em;
     border:var(--lw) solid var(--ink);padding:10px;}
@@ -545,7 +558,31 @@
         </div>
         <div id="homeUpscaleResult" class="inline-error" hidden></div>
       </div>
+
+      <!-- Refino por prompt livre (Dave, 2026-09-18): qualquer imagem selecionada, sempre disponível -->
+      <div id="homeRefineBox" class="home-refine">
+        <label for="refineInstruction" data-i18n="me.refine.title">Refinar com IA</label>
+        <p class="help-text" data-i18n="me.refine.help"></p>
+        <textarea id="refineInstruction" maxlength="500" rows="3" data-i18n-placeholder="me.refine.placeholder"></textarea>
+        <button type="button" id="refineBtn" class="secondary" disabled data-i18n="me.refine.button">Refinar</button>
+        <div id="refineRunning" class="home-upscale-running" hidden>
+          <span data-i18n="me.refine.running">Refinando...</span>
+          <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
+          <button type="button" class="row-cancel" id="refineCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
+        </div>
+        <div id="refineResult" class="inline-error" hidden></div>
+      </div>
     </section>
+
+    <!-- Modal do modelo anterior (Dave, 2026-09-18): fora das telas de propósito - é aberto tanto pela extração (tela de resultado) quanto pelo refino (tela inicial). -->
+    <div id="legacyModelModal" class="modal-backdrop" hidden>
+      <div class="modal" role="alertdialog" aria-labelledby="legacyModelModalTitle">
+        <div class="bar"><span class="tab" aria-hidden="true"></span><span id="legacyModelModalTitle" data-i18n="me.extract.result.legacyTitle">Modelo de imagem indisponível</span></div>
+        <div class="modal-body" data-i18n="me.extract.result.legacyBody"></div>
+        <button type="button" id="legacyModelUse" class="primary" data-i18n="me.extract.result.legacyUse">Usar modelo anterior</button>
+        <button type="button" id="legacyModelCancel" class="secondary" data-i18n="me.extract.result.legacyCancel">Agora não</button>
+      </div>
+    </div>
 
     <!-- 4.3: detectando -->
     <section id="screen-detecting" hidden class="loading-screen">
@@ -617,17 +654,10 @@
           <button type="button" id="copyrightModalOk" class="primary" data-i18n="me.extract.result.copyrightOk">Entendi</button>
         </div>
       </div>
-      <div id="legacyModelModal" class="modal-backdrop" hidden>
-        <div class="modal" role="alertdialog" aria-labelledby="legacyModelModalTitle">
-          <div class="bar"><span class="tab" aria-hidden="true"></span><span id="legacyModelModalTitle" data-i18n="me.extract.result.legacyTitle">Modelo de imagem indisponível</span></div>
-          <div class="modal-body" data-i18n="me.extract.result.legacyBody"></div>
-          <button type="button" id="legacyModelUse" class="primary" data-i18n="me.extract.result.legacyUse">Usar modelo anterior</button>
-          <button type="button" id="legacyModelCancel" class="secondary" data-i18n="me.extract.result.legacyCancel">Agora não</button>
-        </div>
-      </div>
       <div class="result-summary" id="resultSummary"></div>
       <div class="inline-error" id="resultUpscaleError" hidden></div>
       <button type="button" id="resultRetryFailedBtn" class="secondary" hidden data-i18n="me.common.retry">Tentar de novo</button>
+      <button type="button" id="resultRefineBtn" class="secondary" data-i18n="me.result.refineButton">Refinar com IA</button>
       <button type="button" id="resultNewImageBtn" class="primary" data-i18n="me.extract.result.newImage">Extrair outra imagem</button>
     </section>
 
@@ -866,6 +896,7 @@
     upscaleDevice: "gpu",     // vira "cpu" quando a máquina não tem GPU com Vulkan
     canUpscaleSelection: false, // IA de upscale instalada (vem no status) — botão da home
     selectionUpscale: "idle", // "idle"|"running" — upscale avulso da imagem selecionada
+    refine: "idle",           // "idle"|"running" — refino por prompt livre da imagem selecionada
     selectionDevice: "gpu",   // "cpu" depois que a GPU faltou nesse fluxo
     lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
     extractionQuality: "medium", // low|medium|high|xhigh|max — slider in Configurações, sent as X-Extract-Preset
@@ -978,6 +1009,9 @@
         break;
       case "upscaleProgress":
         onUpscaleProgress(msg);
+        break;
+      case "refine":
+        onRefine(msg);
         break;
       case "busy":
         break;
@@ -1306,7 +1340,7 @@
 
   // Qualquer upscale em andamento (linha da tela de resultado OU imagem selecionada na home).
   function upscaleBusy(){
-    if (state.selectionUpscale === "running") return true;
+    if (state.selectionUpscale === "running" || state.refine === "running") return true;
     for (var k in state.upscale) if (state.upscale[k] === "running") return true;
     return false;
   }
@@ -1321,6 +1355,7 @@
 
   // ---- upscale avulso da imagem selecionada (tela inicial) ------------------------------
   function renderHomeUpscale(){
+    renderRefine();
     var box = $("homeUpscaleBox");
     box.hidden = !state.canUpscaleSelection;
     if (box.hidden) return;
@@ -1366,6 +1401,63 @@
     send({cmd:"upscaleElement", id: SELECTION_UPSCALE_ID, device: state.selectionDevice});
   });
   $("homeUpscaleCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
+  // ---- refino por prompt livre (Dave, 2026-09-18) --------------------------------------------
+  // Qualquer bitmap selecionado no Corel + uma instrução; o resultado entra AO LADO do original.
+  // Sempre disponível na tela inicial (e um atalho na tela de resultado).
+  function renderRefine(){
+    var running = state.refine === "running";
+    var typed = $("refineInstruction").value.trim().length;
+    $("refineBtn").hidden = running;
+    $("refineBtn").disabled = !state.selIsBitmap || upscaleBusy() || typed < 3;
+    $("refineRunning").hidden = !running;
+    $("refineInstruction").disabled = running;
+  }
+
+  function startRefine(){
+    state.refine = "running";
+    $("refineResult").hidden = true;
+    hide("homeError");
+    renderHomeUpscale();
+    rerenderResultRows();
+    send({cmd:"refine", instruction: $("refineInstruction").value});
+  }
+
+  function onRefine(msg){
+    var res = $("refineResult");
+    if (msg.stage === "running") {
+      state.refine = "running";
+    } else {
+      state.refine = "idle";
+      if (msg.ok) {
+        $("refineInstruction").value = "";
+        res.className = "inline-ok"; res.textContent = T("me.refine.done"); res.hidden = false;
+      } else if (msg.code === "E_CANCELLED") {
+        res.hidden = true;
+      } else if (msg.code === "E_OPENAI_MODEL_UNAVAILABLE") {
+        res.hidden = true;
+        showLegacyModelModal(startRefine);
+      } else {
+        res.className = "inline-error";
+        res.textContent = msg.error || T("me.common.error.unknown");
+        res.hidden = false;
+      }
+    }
+    renderHomeUpscale();
+    rerenderResultRows();
+  }
+
+  $("refineInstruction").addEventListener("input", renderRefine);
+  $("refineBtn").addEventListener("click", function(){
+    if (upscaleBusy() || !state.selIsBitmap) return;
+    if (!state.hasOpenAiKey) { openSettings({nudgeKey: true}); return; }
+    startRefine();
+  });
+  $("refineCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
+  $("resultRefineBtn").addEventListener("click", function(){
+    showScreen("screen-home");
+    send({cmd:"status"});
+    $("refineInstruction").focus();
+  });
   $("copyrightModalOk").addEventListener("click", function(){ $("copyrightModal").hidden = true; });
 
   function onUpscaleProgress(msg){
@@ -1424,20 +1516,25 @@
     $("copyrightModalOk").focus();
   }
 
-  // Chave sem acesso ao GPT Image 2.5 (Dave, 2026-09-18): o lote parou e o operador decide se
-  // segue com o modelo anterior. "Usar" avisa o bridge (flag da sessão) e refaz só o que falhou;
-  // "Agora não" só fecha — a lista de motivos abaixo da tabela continua explicando o que houve.
-  function showLegacyModelModalIfNeeded(msg){
-    if (msg.code !== "E_OPENAI_MODEL_UNAVAILABLE") return;
+  // Chave sem acesso ao GPT Image 2.5 (Dave, 2026-09-18): a operação parou (lote de extração ou
+  // refino) e o operador decide se segue com o modelo anterior. "Usar" avisa o bridge (flag da
+  // sessão) e refaz SÓ o que falhou, via o `retry` que quem abriu o modal deixou; "Agora não" só
+  // fecha — a mensagem de erro de cada tela continua explicando o que houve.
+  function showLegacyModelModal(retry){
+    state.legacyRetry = retry;
     $("legacyModelModal").hidden = false;
     $("legacyModelUse").focus();
+  }
+  function showLegacyModelModalIfNeeded(msg){
+    if (msg.code !== "E_OPENAI_MODEL_UNAVAILABLE") return;
+    showLegacyModelModal(function(){ beginExtraction(state.lastFailedIds.slice()); });
   }
   $("legacyModelUse").addEventListener("click", function(){
     $("legacyModelModal").hidden = true;
     send({cmd:"useLegacyModel"});
-    beginExtraction(state.lastFailedIds.slice());
-  });
-  $("legacyModelCancel").addEventListener("click", function(){ $("legacyModelModal").hidden = true; });
+    var retry = state.legacyRetry; state.legacyRetry = null;
+    if (retry) retry();
+  });  $("legacyModelCancel").addEventListener("click", function(){ $("legacyModelModal").hidden = true; });
 
   function onExtractDone(msg){
     stopElapsed();

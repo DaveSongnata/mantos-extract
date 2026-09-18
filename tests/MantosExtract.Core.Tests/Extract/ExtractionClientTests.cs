@@ -243,5 +243,83 @@ namespace MantosExtract.Core.Tests.Extract
             Assert.True(ex.IsOpenAiModelUnavailable);
             Assert.Equal("Sua chave ainda nao tem acesso.", ex.Message);
         }
+
+        [Fact]
+        public async Task RefineAsync_PostsImageAndInstructionToTheRefineEndpoint_ThenDownloadsTheResult()
+        {
+            string? path = null, body = null, preset = null, bearer = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    path = req.RequestUri!.AbsolutePath;
+                    body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                    preset = req.Headers.TryGetValues("X-Extract-Preset", out var p) ? string.Join(",", p) : null;
+                    bearer = req.Headers.Authorization?.ToString();
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/refined""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 7, 7 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            ExtractedImage result = await client.RefineAsync("s1", "sk-key", "max", new byte[] { 9, 9, 9 },
+                "image/png", "remove a pessoa de dentro do carro", CancellationToken.None);
+
+            Assert.Equal("/api/v1/mantos-extract/refine", path);
+            Assert.Contains("remove a pessoa de dentro do carro", body);
+            Assert.Contains("name=instruction", body);
+            Assert.Contains("name=image", body);
+            Assert.Equal("max", preset);
+            Assert.Equal("Bearer s1", bearer);
+            Assert.Equal(new byte[] { 7, 7 }, result.Bytes);
+        }
+
+        [Fact]
+        public async Task RefineAsync_LegacyFlag_IsSentAsFlagHeader()
+        {
+            string? legacy = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    legacy = req.Headers.TryGetValues("X-Extract-Legacy-Model", out var v) ? string.Join(",", v) : null;
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/r""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.RefineAsync("s1", "k", "medium", new byte[] { 1 }, "image/png", "pinte de azul",
+                CancellationToken.None, legacyModel: true);
+
+            Assert.Equal("1", legacy);
+        }
+
+        [Fact]
+        public async Task RefineAsync_ServerModerationRefusal_KeepsCodeAndMessage()
+        {
+            var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage((HttpStatusCode)422)
+            {
+                Content = new StringContent(
+                    @"{""code"":""E_OPENAI_MODERATION"",""message"":""A OpenAI recusou.""}",
+                    Encoding.UTF8, "application/json"),
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            var ex = await Assert.ThrowsAsync<MantosExtractApiException>(() =>
+                client.RefineAsync("s1", "k", "medium", new byte[] { 1 }, "image/png", "faz algo",
+                    CancellationToken.None));
+
+            Assert.Equal("E_OPENAI_MODERATION", ex.Code);
+            Assert.Equal("A OpenAI recusou.", ex.Message);
+        }
     }
 }

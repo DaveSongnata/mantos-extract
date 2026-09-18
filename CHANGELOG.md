@@ -6,6 +6,48 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-18 — GPT Image 2.5 Flare, cinco presets de qualidade e refino por prompt livre
+
+Três mudanças pedidas juntas pelo Dave; três commits em cada repo (mantosfc `ab1d115`, `23e180f`,
+`eedcd9d`; addin 0.9.4, 0.9.5 e 0.9.6). M2 (sem crédito) e M3 (BYOK) seguem intactas — nada aqui
+debita nada; o custo dos presets é da chave OpenAI do próprio operador.
+
+**1. Modelo: `gpt-image-2` → `gpt-image-2.5-flare` (snapshot `-2026-09-08`).** IDs conferidos na doc
+oficial da OpenAI. Flare, não Sunburst: é a variante rápida/econômica, mesmo preço por token,
+qualidade comparável ao gpt-image-2. O modelo é CONSTANTE de código (`mantos_extract_presets.ts`),
+não env — a env `OPENAI_EXTRACTION_MODEL` já derrubou a produção uma vez. Duas decisões junto:
+- **`size` deixa de ser `auto`** (gerava ~1MP, pouco pra camisa): o servidor calcula o maior
+  tamanho da faixa NÃO experimental da doc (2560x1440 = 3.686.400 px, lados múltiplos de 16,
+  proporção 1:3..3:1) pra proporção do recorte; fora dessa faixa de proporção cai em `auto`.
+- **Chave sem acesso ao 2.5** (BYOK: depende de tier/verificação da conta do tenant): o servidor
+  devolve `422 E_OPENAI_MODEL_UNAVAILABLE` e o addin abre um MODAL perguntando se usa o modelo
+  anterior — nunca troca sozinho, porque a qualidade muda. Aceitar liga uma flag da sessão
+  (`X-Extract-Legacy-Model: 1`, nunca um nome de modelo) e refaz só o que falhou; trocar a chave
+  zera a flag. O modo anterior é exatamente o de antes: `gpt-image-2`, `size=auto`.
+
+**2. Presets = os cinco níveis de `quality` do 2.5** (`low`, `medium`, `high`, `xhigh`, `max`;
+`auto` fica de fora de propósito). O slider das Configurações passou de 3 para 5 paradas; o addin
+manda só o NOME em `X-Extract-Preset` e o servidor traduz. `X-OpenAI-Quality` segue aceito como
+alias (addins já instalados). Padrão continua `medium`. `xhigh`/`max` não existem no
+gpt-image-2, então no modo anterior viram `high`.
+
+**3. Refino por prompt livre** (`POST /mantos-extract/refine`, botão sempre disponível na tela
+inicial + atalho na tela de resultado). Decisões do Dave: cliente reenvia o bitmap (stateless) e
+NÃO há limite de entrada além dos 50MB reais da OpenAI; serve pra QUALQUER bitmap do Corel (uma
+peça extraída ou "pinte essa camisa de azul"); o resultado entra AO LADO do original, mesmo
+tamanho físico em mm, nome + " (refinado)" — o original fica intacto e recuperável. Decisões
+técnicas: o fundo acompanha a origem (peça transparente sai transparente, foto opaca sai opaca);
+a saída volta na proporção exata da entrada (a API só aceita lados múltiplos de 16); o texto do
+operador entra dentro de um prompt ancorado ("altere só o pedido, preserve o resto") entre
+delimitadores que ele não consegue fechar. Sem upscale automático.
+
+**Ponto de atenção conhecido:** a extração agora sai em ~3,7MP (antes ~1MP). O upscale local
+roda `-s 4` e reduz pela metade, então o tempo dele cresce na mesma proporção (~2,3×); na GPU é
+aceitável, no modo CPU (lavapipe) pode passar de 20 min — o botão continua opcional por peça.
+Não foi medido nesta sessão.
+
+---
+
 ## 2026-09-07 — Três ajustes de polimento: crédito morto removido, barra de progresso viva, aviso de chave
 
 **1. Código morto de crédito removido de vez.** A reversão de M2 (entrada anterior) deixou o

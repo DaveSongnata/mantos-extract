@@ -380,6 +380,59 @@ namespace MantosExtract.Interop
             return true;
         }
 
+        public bool PlaceBesideTrackedShape(string key, string pngPath, string nameSuffix)
+        {
+            using var _ = new CorelDocumentState(_app);
+            InteropLog.Write("refino '" + key + "': colocar " + System.IO.Path.GetFileName(pngPath) + " ao lado (" + InteropLog.PngInfo(pngPath) + ")");
+
+            object? tracked = ResolveTracked(key);
+            if (tracked == null) return false;
+
+            // Geometria do original lida ANTES de importar: se ele foi apagado à mão, isso lança e
+            // saímos sem ter jogado uma peça solta na página (mesma cautela do ReplaceTrackedShape).
+            double leftMm, bottomMm, widthMm, heightMm;
+            try
+            {
+                dynamic old = tracked;
+                leftMm = (double)old.LeftX;
+                bottomMm = (double)old.BottomY;
+                widthMm = (double)old.SizeWidth;
+                heightMm = (double)old.SizeHeight;
+            }
+            catch (Exception ex)
+            {
+                InteropLog.Write("refino '" + key + "': geometria do original ilegível (" + InteropLog.Describe(ex) + ")");
+                return false;
+            }
+
+            string? oldName = null;
+            try { oldName = (string)((dynamic)tracked).Name; } catch { /* nome é cosmético */ }
+
+            dynamic imported = CorelImporter.Import(_app, _app.ActiveDocument, pngPath);
+            _lastImportedShape = imported;
+            try { imported.Name = (string.IsNullOrEmpty(oldName) ? "Bitmap" : oldName) + nameSuffix; } catch { }
+
+            // Tamanho primeiro, posição depois (mexer no tamanho move a âncora no Corel): a peça
+            // nova tem a resolução que a IA gerou, mas o tamanho FÍSICO do original.
+            var (newLeft, newBottom) = MantosExtract.Core.Layout.RefinePlacement.Beside(leftMm, bottomMm, widthMm);
+            try
+            {
+                imported.SizeWidth = widthMm;
+                imported.SizeHeight = heightMm;
+                imported.LeftX = newLeft;
+                imported.BottomY = newBottom;
+            }
+            catch (Exception ex)
+            {
+                InteropLog.Write("refino '" + key + "': encaixe falhou, nova=" + InteropLog.ShapeInfo((object)imported) + " (" + InteropLog.Describe(ex) + ")");
+                throw new InvalidOperationException(
+                    "A imagem refinada entrou, mas não consegui posicioná-la ao lado da original: " + ex.Message, ex);
+            }
+
+            InteropLog.Write("refino '" + key + "': original " + InteropLog.ShapeInfo(tracked) + " -> nova " + InteropLog.ShapeInfo((object)imported));
+            return true;
+        }
+
         public (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ActivePageBoundsMm()
         {
             using var _ = new CorelDocumentState(_app);

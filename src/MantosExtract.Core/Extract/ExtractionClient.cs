@@ -78,6 +78,18 @@ namespace MantosExtract.Core.Extract
             return await DownloadAsync(url, ct).ConfigureAwait(false);
         }
 
+        public async Task<ExtractedImage> RefineAsync(string sessionId, string openAiApiKey, string quality,
+            byte[] imageBytes, string mimeType, string instruction, CancellationToken ct,
+            bool legacyModel = false)
+        {
+            using var form = new MultipartFormDataContent();
+            form.Add(ImagePart(imageBytes, mimeType), "image", "selecao.png");
+            form.Add(new StringContent(instruction ?? ""), "instruction");
+
+            string url = await PostForUrlAsync("/api/v1/mantos-extract/refine", form, sessionId, openAiApiKey,
+                quality, legacyModel, ct).ConfigureAwait(false);
+            return await DownloadAsync(url, ct).ConfigureAwait(false);
+        }
         private static ByteArrayContent ImagePart(byte[] imageBytes, string mimeType)
         {
             var imageContent = new ByteArrayContent(imageBytes);

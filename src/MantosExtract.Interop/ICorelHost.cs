@@ -55,6 +55,13 @@ namespace MantosExtract.Interop
         /// <returns>Linha pro log: atributos do bitmap e por qual via o arquivo saiu.</returns>
         string SaveSelectedBitmapForUpscale(string pngPath, string trackKey);
 
+        /// <summary>Refino por prompt livre (Dave, 2026-09-18): importa <paramref name="pngPath"/> e
+        /// coloca AO LADO da forma rastreada sob <paramref name="key"/> (Core.Layout.RefinePlacement),
+        /// com o MESMO tamanho físico em mm e o nome dela + <paramref name="nameSuffix"/>. O original
+        /// não é tocado — fica recuperável. Devolve false, sem importar nada, quando o original foi
+        /// apagado à mão pelo operador.</summary>
+        bool PlaceBesideTrackedShape(string key, string pngPath, string nameSuffix);
+
         /// <summary>Active page bounding box in millimetres, used to place the first imported
         /// element sensibly when there is no prior element to lay out next to.</summary>
         (double LeftMm, double BottomMm, double WidthMm, double HeightMm) ActivePageBoundsMm();

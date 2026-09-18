@@ -123,6 +123,7 @@ namespace MantosExtract.AddIn.Ui
                 string extractionQuality = "";
                 string elementId = "";
                 string device = "";
+                string instruction = "";
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -138,6 +139,7 @@ namespace MantosExtract.AddIn.Ui
                     extractionQuality = Str(root, "quality");
                     elementId = Str(root, "id");
                     device = Str(root, "device");
+                    instruction = Str(root, "instruction");
                 }
 
                 // status/cancel/cancelElement furam o busy-guard de propósito: cancelar só faz
@@ -177,6 +179,7 @@ namespace MantosExtract.AddIn.Ui
                     case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, ct)); break;
                     case "cancel": _runningCts?.Cancel(); break;
                     case "cancelElement": CancelElement(elementId); break;
+                    case "refine": RunAsync(ct => RunRefineAsync(instruction, ct)); break;
 
                     // Task.Run porque UpscaleElement é síncrono e demorado (processo externo com
                     // WaitForExit, ~8s): rodar direto aqui travaria a thread de eventos do Corel.
