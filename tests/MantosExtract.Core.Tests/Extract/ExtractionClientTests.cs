@@ -122,14 +122,14 @@ namespace MantosExtract.Core.Tests.Extract
         }
 
         [Fact]
-        public async Task ExtractAsync_SendsQualityAsHeader()
+        public async Task ExtractAsync_SendsPresetNameAsHeader()
         {
             string? capturedQualityHeader = null;
             var handler = new StubHttpMessageHandler(req =>
             {
                 if (req.Method == HttpMethod.Post)
                 {
-                    capturedQualityHeader = req.Headers.TryGetValues("X-OpenAI-Quality", out var vals)
+                    capturedQualityHeader = req.Headers.TryGetValues("X-Extract-Preset", out var vals)
                         ? string.Join(",", vals) : null;
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {
@@ -148,14 +148,14 @@ namespace MantosExtract.Core.Tests.Extract
         }
 
         [Fact]
-        public async Task ExtractAsync_BlankQuality_DefaultsToMediumHeader()
+        public async Task ExtractAsync_BlankOrUnknownPreset_DefaultsToMediumHeader()
         {
             string? capturedQualityHeader = null;
             var handler = new StubHttpMessageHandler(req =>
             {
                 if (req.Method == HttpMethod.Post)
                 {
-                    capturedQualityHeader = req.Headers.TryGetValues("X-OpenAI-Quality", out var vals)
+                    capturedQualityHeader = req.Headers.TryGetValues("X-Extract-Preset", out var vals)
                         ? string.Join(",", vals) : null;
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {

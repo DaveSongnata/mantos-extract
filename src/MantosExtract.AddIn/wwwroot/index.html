@@ -682,11 +682,13 @@
       <label data-i18n="me.settings.quality.label">Qualidade da extração</label>
       <p class="help-text" data-i18n="me.settings.quality.help">Mais qualidade = resultado mais nítido, custo maior por elemento. Padrão já cobre a maioria dos casos.</p>
       <div class="quality-slider">
-        <input type="range" id="qualitySlider" min="0" max="2" step="1" value="1" data-i18n-title="me.settings.quality.label">
+        <input type="range" id="qualitySlider" min="0" max="4" step="1" value="1" data-i18n-title="me.settings.quality.label">
         <div class="quality-ticks" id="qualityTicks">
           <span data-i18n="me.settings.quality.low">Rápida</span>
           <span data-i18n="me.settings.quality.medium">Padrão</span>
           <span data-i18n="me.settings.quality.high">Alta</span>
+          <span data-i18n="me.settings.quality.xhigh">Muito alta</span>
+          <span data-i18n="me.settings.quality.max">Máxima</span>
         </div>
       </div>
       <div id="qualitySaved" class="saved-note" hidden data-i18n="me.settings.quality.saved">Preferência salva.</div>
@@ -866,7 +868,7 @@
     selectionUpscale: "idle", // "idle"|"running" — upscale avulso da imagem selecionada
     selectionDevice: "gpu",   // "cpu" depois que a GPU faltou nesse fluxo
     lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
-    extractionQuality: "medium", // low|medium|high — slider in Configurações, sent as X-OpenAI-Quality
+    extractionQuality: "medium", // low|medium|high|xhigh|max — slider in Configurações, sent as X-Extract-Preset
   };
 
   // ---- auth screens ---------------------------------------------------------
@@ -879,7 +881,7 @@
     setLoginBusy(false);
   }
 
-  var QUALITY_LEVELS = ["low", "medium", "high"];
+  var QUALITY_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 
   function renderHome(msg){
     state.extractionQuality = QUALITY_LEVELS.indexOf(msg.extractionQuality) >= 0 ? msg.extractionQuality : "medium";

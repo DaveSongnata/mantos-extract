@@ -97,10 +97,9 @@ namespace MantosExtract.Core.Extract
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", sessionId);
             request.Headers.Add("X-OpenAI-Api-Key", openAiApiKey);
-            // Cost/quality dial the operator sets in Configurações (Dave, 2026-09-07) — orthogonal
-            // to fidelity (mantosfc's gpt-image-2 always preserves the source at high fidelity
-            // regardless of this value; see CLAUDE.md/CHANGELOG on the hallucination fix).
-            request.Headers.Add("X-OpenAI-Quality", string.IsNullOrWhiteSpace(quality) ? "medium" : quality);
+            // Só o NOME do preset que o operador escolheu nas Configurações (Dave, 2026-09-18): o
+            // servidor traduz em modelo/qualidade/tamanho — o cliente nunca manda parâmetros crus.
+            request.Headers.Add("X-Extract-Preset", ExtractionPresets.Normalize(quality));
             if (legacyModel) request.Headers.Add("X-Extract-Legacy-Model", "1");
 
             HttpResponseMessage response;

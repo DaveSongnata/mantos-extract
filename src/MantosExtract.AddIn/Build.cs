@@ -1,4 +1,4 @@
-﻿namespace MantosExtract.AddIn
+namespace MantosExtract.AddIn
 {
     /// <summary>
     /// Human-visible build tag, logged at docker startup (%TEMP%\MantosExtract\docker.log) so
@@ -6,6 +6,6 @@
     /// </summary>
     internal static class Build
     {
-        public const string Tag = "0.9.4";
+        public const string Tag = "0.9.5";
     }
 }
