@@ -158,7 +158,7 @@ namespace MantosExtract.Core.Extract
             return new ExtractedImage(bytes, mimeType, url);
         }
 
-        private static MantosExtractApiException BuildError(HttpStatusCode status, string body)
+        internal static MantosExtractApiException BuildError(HttpStatusCode status, string body)
         {
             string message = status switch
             {

@@ -103,6 +103,7 @@ namespace MantosExtract.AddIn.Ui
             try { (_authClient as IDisposable)?.Dispose(); } catch { }
             try { (_detectionClient as IDisposable)?.Dispose(); } catch { }
             try { (_extractionClient as IDisposable)?.Dispose(); } catch { }
+            try { (_recraftClient as IDisposable)?.Dispose(); } catch { }
         }
 
         // Runs on CorelDRAW's STA event thread — an uncaught exception here would take the
@@ -171,6 +172,7 @@ namespace MantosExtract.AddIn.Ui
                     case "logout": RunAsync(async ct => PostAuth(await _auth.LogoutAsync(ct))); break;
 
                     case "saveOpenAiKey": SaveOpenAiKey(openAiKey); break;
+                    case "saveRecraftKey": SaveRecraftKey(openAiKey); break; // mesmo campo JSON "key" da OpenAI
                     case "useLegacyModel": _useLegacyImageModel = true; MantosExtractLog.Write("Modelo anterior aceito pelo operador"); break;
                     case "saveExtractionQuality": SaveExtractionQuality(extractionQuality); break;
                     case "changePassword": RunAsync(ct => ChangePasswordAsync(currentPassword, newPassword, ct)); break;
@@ -180,6 +182,8 @@ namespace MantosExtract.AddIn.Ui
                     case "cancel": _runningCts?.Cancel(); break;
                     case "cancelElement": CancelElement(elementId); break;
                     case "refine": RunAsync(ct => RunRefineAsync(instruction, ct)); break;
+                    case "removeBackground": RunAsync(ct => RunRecraftAsync(MantosExtract.Core.Recraft.RecraftOperation.RemoveBackground, ct)); break;
+                    case "vectorize": RunAsync(ct => RunRecraftAsync(MantosExtract.Core.Recraft.RecraftOperation.Vectorize, ct)); break;
 
                     // Task.Run porque UpscaleElement é síncrono e demorado (processo externo com
                     // WaitForExit, ~8s): rodar direto aqui travaria a thread de eventos do Corel.
@@ -268,6 +272,7 @@ namespace MantosExtract.AddIn.Ui
                 role = session.Role,
                 warning = result.WarningMessage,
                 hasOpenAiKey = _credentials.LoadOpenAiKey() != null,
+                hasRecraftKey = _credentials.LoadRecraftKey() != null,
                 extractionQuality = ExtractionQualityStore.Read(),
             });
         }

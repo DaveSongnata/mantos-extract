@@ -15,7 +15,8 @@ namespace MantosExtract.Windows
     /// Two files under <c>%LOCALAPPDATA%\MantosExtract</c>, each individually
     /// <c>ProtectedData.Protect</c>'d with <see cref="DataProtectionScope.CurrentUser"/> (no
     /// extra entropy): the mantosfc session (Bearer UUID + expiry + role + email — never the
-    /// password) and the tenant's own OpenAI key (BYOK, Dave 2026-09-03). CurrentUser scope
+    /// password), the tenant's own OpenAI key (BYOK, Dave 2026-09-03) and the tenant's own
+    /// Recraft key (BYOK, Dave 2026-09-20, <c>recraft.bin</c>). CurrentUser scope
     /// already gives the guarantee we need — bound to this Windows user on this machine, unable
     /// to silently roam to another machine — so a second secret is complexity without a threat
     /// it defends against.
@@ -33,6 +34,7 @@ namespace MantosExtract.Windows
 
         private static string SessionPath => Path.Combine(Dir, "session.bin");
         private static string OpenAiKeyPath => Path.Combine(Dir, "openai.bin");
+        private static string RecraftKeyPath => Path.Combine(Dir, "recraft.bin");
 
         public SessionState? LoadSession()
         {
@@ -60,6 +62,26 @@ namespace MantosExtract.Windows
         }
 
         public void ClearOpenAiKey() => DeleteQuietly(OpenAiKeyPath);
+
+        public string? LoadRecraftKey() => ReadProtected(RecraftKeyPath);
+
+        /// <summary>Chave da Recraft (BYOK, Dave 2026-09-20). Ao contrário da OpenAI, NÃO engole a
+        /// falha: grava, relê e compara; se não bateu, lança — o Bridge só responde "salva" quando a
+        /// chave realmente ficou guardada.</summary>
+        public void SaveRecraftKey(string apiKey)
+        {
+            if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("Chave vazia.", nameof(apiKey));
+            string trimmed = apiKey.Trim();
+
+            Directory.CreateDirectory(Dir);
+            byte[] cipher = ProtectedData.Protect(Encoding.UTF8.GetBytes(trimmed), null, DataProtectionScope.CurrentUser);
+            File.WriteAllBytes(RecraftKeyPath, cipher);
+
+            if (ReadProtected(RecraftKeyPath) != trimmed)
+                throw new IOException("A chave da Recraft não ficou gravada.");
+        }
+
+        public void ClearRecraftKey() => DeleteQuietly(RecraftKeyPath);
 
         private static string? ReadProtected(string path)
         {

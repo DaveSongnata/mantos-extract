@@ -6,6 +6,29 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-20 — Remover fundo e vetorizar via Recraft (BYOK) + refino em modal
+
+Versão 0.9.7 (refino num modal, botão na Home) e 0.9.8 (Recraft). Continua sem crédito (M2/M3): o
+custo da Recraft é da chave do próprio tenant. Detalhes das decisões no `CLAUDE.md` (seção "Remover
+fundo e vetorizar"; M3, M6 e M7 atualizadas).
+
+- **Experimento primeiro** (`D:\sback\recraft-test`, 24 chamadas, US$ 0,24): `removeBackground`
+  (campo `image`) e `vectorize` (campo `file`) como chamadas INDEPENDENTES deram os melhores
+  resultados; encadear `removeBackground` sobre SVG foi pior. Degradê vira faixas (D4V41: 469 paths,
+  256 KB); arte chapada ficou excelente.
+- **Botões só com ilustração** (Dave preferiu ícone a texto): refinar (lápis), remover fundo (recorte
+  tracejado) e vetorizar (curva com âncoras). O nome fica no tooltip e em texto pra leitor de tela.
+- **Servidor** (mantosfc `af4ead2`): rotas `/mantos-extract/remove-background` e `/vectorize`,
+  client único da Recraft, credencial `X-Recraft-Api-Key`, pré-processamento de limites, mapeamento
+  de erros por status. 401/403 da Recraft saem como 422 (401 levaria o operador à tela de login).
+- **Addin:** `IRecraftClient`/`RecraftClient`, `RecraftOperations`, `RecraftErrorMessages` (código
+  -> i18n nas 3 línguas), `RecraftPlacement.FitInside` (escala uniforme do SVG), import de SVG no
+  `CorelImporter` (agrupa vários objetos), `MantosExtractBridge.Recraft.cs` (partial).
+- **Não validado:** o import do SVG no Corel real (nenhum projeto irmão importa SVG; pode abrir
+  diálogo ou vir em vários objetos) e o status HTTP que a Recraft usa pra "sem créditos".
+
+---
+
 ## 2026-09-18 — GPT Image 2.5 Flare, cinco presets de qualidade e refino por prompt livre
 
 Três mudanças pedidas juntas pelo Dave; três commits em cada repo (mantosfc `ab1d115`, `23e180f`,

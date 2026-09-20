@@ -167,6 +167,21 @@
   .refine-modal textarea:focus-visible{outline:2px solid var(--accent-dark);outline-offset:0;}
   .refine-modal textarea:disabled{opacity:.5;}
   .refine-modal .home-upscale-running,.refine-modal .inline-ok,.refine-modal .inline-error{margin:0 12px;}
+  /* Linha de ações por IA na tela inicial (Dave, 2026-09-20): botões só com ILUSTRAÇÃO (o nome fica
+     no tooltip e no texto pra leitor de tela). Traço duro, raio zero, sem cor nova — um ícone por
+     ação, nunca sparkle/estrela (clichê de "IA"). */
+  .icon-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .icon-btn{
+    display:flex;align-items:center;justify-content:center;height:52px;padding:0;cursor:pointer;
+    background:var(--surface);color:var(--ink);border:var(--lw) solid var(--ink);border-radius:0;
+  }
+  .icon-btn svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:square;stroke-linejoin:miter;}
+  .icon-btn:hover:not(:disabled){background:var(--accent);}
+  .icon-btn:focus-visible{outline:2px solid var(--accent-dark);outline-offset:2px;}
+  .icon-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+  .recraft-hint{font-size:11px;line-height:1.4;border-left:var(--lw) solid var(--ink);padding:6px 8px;background:var(--surface);}
+  .recraft-hint .linklike{margin-left:4px;}
   .home-upscale-running{display:flex;align-items:center;justify-content:center;gap:8px;
     font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.02em;
     border:var(--lw) solid var(--ink);padding:10px;}
@@ -560,7 +575,31 @@
 
       <!-- Refino por prompt livre (Dave, 2026-09-18): qualquer imagem selecionada. O botão abre o
            modal #refineModal (Dave, 2026-09-20), que guarda o campo e o resultado. -->
-      <button type="button" id="refineOpenBtn" class="secondary" disabled data-i18n="me.refine.title">Refinar com IA</button>
+      <div class="icon-row">
+        <button type="button" id="refineOpenBtn" class="icon-btn" disabled data-i18n-title="me.refine.title" title="Refinar com IA">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L16 4l4 4L9 19z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>
+          <span class="sr-only" data-i18n="me.refine.title">Refinar com IA</span>
+        </button>
+        <button type="button" id="removeBgBtn" class="icon-btn" disabled data-i18n-title="me.recraft.removeBg.title" title="Remover fundo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" stroke-dasharray="3 2.5"/><circle cx="12" cy="9.5" r="3"/><path d="M6.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/></svg>
+          <span class="sr-only" data-i18n="me.recraft.removeBg.title">Remover fundo</span>
+        </button>
+        <button type="button" id="vectorizeBtn" class="icon-btn" disabled data-i18n-title="me.recraft.vectorize.title" title="Vetorizar (SVG)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19C5 10 10 6 19 5"/><rect x="3" y="17" width="4" height="4"/><rect x="17" y="3" width="4" height="4"/></svg>
+          <span class="sr-only" data-i18n="me.recraft.vectorize.title">Vetorizar (SVG)</span>
+        </button>
+      </div>
+      <!-- Sem chave da Recraft as duas ações aparecem desabilitadas, com orientação clara. -->
+      <div id="recraftHint" class="recraft-hint" hidden>
+        <span data-i18n="me.recraft.hint.noKey">Cadastre a chave da Recraft nas Configurações para remover fundo e vetorizar.</span>
+        <button type="button" id="recraftHintSettings" class="linklike" data-i18n="me.recraft.hint.openSettings">Abrir Configurações</button>
+      </div>
+      <div id="recraftRunning" class="home-upscale-running" hidden>
+        <span id="recraftRunningText"></span>
+        <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
+        <button type="button" class="row-cancel" id="recraftCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
+      </div>
+      <div id="recraftResult" class="inline-error" hidden></div>
     </section>
 
     <!-- Modal do refino: fora das telas de propósito (aberto pela tela inicial e pela de resultado). -->
@@ -712,6 +751,18 @@
       </div>
       <button type="button" id="saveOpenAiKey" class="secondary" data-i18n="me.settings.openai.save">Salvar chave</button>
       <div id="openaiSaved" class="saved-note" hidden data-i18n="me.settings.openai.saved">Chave salva.</div>
+
+      <div class="divider"></div>
+
+      <!-- Chave da Recraft (BYOK, Dave 2026-09-20) — mesmo componente da chave da OpenAI. -->
+      <label for="recraftKey" data-i18n="me.settings.recraft.label">Chave da Recraft</label>
+      <p class="help-text" data-i18n="me.settings.recraft.help">Usada para remover fundo e vetorizar. Sua confecção usa a própria chave da Recraft. Cole aqui uma vez só.</p>
+      <div class="field">
+        <input id="recraftKey" type="password" autocomplete="off">
+      </div>
+      <button type="button" id="saveRecraftKey" class="secondary" data-i18n="me.settings.recraft.save">Salvar chave</button>
+      <div id="recraftSaved" class="saved-note" hidden data-i18n="me.settings.recraft.saved">Chave salva.</div>
+      <div id="recraftSaveError" class="inline-error" hidden></div>
 
       <div class="divider"></div>
 
@@ -903,6 +954,9 @@
     canUpscaleSelection: false, // IA de upscale instalada (vem no status) — botão da home
     selectionUpscale: "idle", // "idle"|"running" — upscale avulso da imagem selecionada
     refine: "idle",           // "idle"|"running" — refino por prompt livre da imagem selecionada
+    hasRecraftKey: false,     // chave da Recraft (BYOK) guardada neste computador
+    recraft: "idle",          // "idle"|"running" — remover fundo / vetorizar da imagem selecionada
+    recraftOp: "",            // "removeBackground"|"vectorize" — qual está rodando/rodou por último
     selectionDevice: "gpu",   // "cpu" depois que a GPU faltou nesse fluxo
     lastRealScreen: "screen-home", // tracked by showScreen — ver nota acima de NON_ANCHOR_SCREENS
     extractionQuality: "medium", // low|medium|high|xhigh|max — slider in Configurações, sent as X-Extract-Preset
@@ -923,6 +977,7 @@
   function renderHome(msg){
     state.extractionQuality = QUALITY_LEVELS.indexOf(msg.extractionQuality) >= 0 ? msg.extractionQuality : "medium";
     state.hasOpenAiKey = !!msg.hasOpenAiKey;
+    state.hasRecraftKey = !!msg.hasRecraftKey;
     $("homeEmail").textContent = msg.email || "";
     $("settingsBtn").hidden = false;
     $("historyBtn").hidden = false;
@@ -975,6 +1030,9 @@
           show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500);
         }
         break;
+      case "recraftKey":
+        onRecraftKey(msg);
+        break;
       case "extractionQuality":
         if (msg.ok) {
           state.extractionQuality = msg.quality;
@@ -1018,6 +1076,9 @@
         break;
       case "refine":
         onRefine(msg);
+        break;
+      case "recraft":
+        onRecraft(msg);
         break;
       case "busy":
         break;
@@ -1346,7 +1407,7 @@
 
   // Qualquer upscale em andamento (linha da tela de resultado OU imagem selecionada na home).
   function upscaleBusy(){
-    if (state.selectionUpscale === "running" || state.refine === "running") return true;
+    if (state.selectionUpscale === "running" || state.refine === "running" || state.recraft === "running") return true;
     for (var k in state.upscale) if (state.upscale[k] === "running") return true;
     return false;
   }
@@ -1362,6 +1423,7 @@
   // ---- upscale avulso da imagem selecionada (tela inicial) ------------------------------
   function renderHomeUpscale(){
     renderRefine();
+    renderRecraft();
     var box = $("homeUpscaleBox");
     box.hidden = !state.canUpscaleSelection;
     if (box.hidden) return;
@@ -1467,6 +1529,77 @@
     renderHomeUpscale();
     rerenderResultRows();
   }
+
+  // ---- remover fundo e vetorizar via Recraft (Dave, 2026-09-20) --------------------------------
+  // Mesmo fluxo do refino: QUALQUER bitmap selecionado, resultado AO LADO do original. Sem chave da
+  // Recraft (BYOK) os dois botões ficam desabilitados e o aviso abaixo orienta a cadastrá-la.
+  function renderRecraft(){
+    var running = state.recraft === "running";
+    var usable = state.selIsBitmap && state.hasRecraftKey && !upscaleBusy();
+    $("removeBgBtn").disabled = !usable;
+    $("vectorizeBtn").disabled = !usable;
+    $("recraftHint").hidden = state.hasRecraftKey;
+    $("recraftRunning").hidden = !running;
+    $("recraftRunningText").textContent =
+      T(state.recraftOp === "vectorize" ? "me.recraft.running.vectorize" : "me.recraft.running.removeBg");
+  }
+
+  function startRecraft(op){
+    if (upscaleBusy() || !state.selIsBitmap || !state.hasRecraftKey) return;
+    state.recraft = "running";
+    state.recraftOp = op;
+    $("recraftResult").hidden = true;
+    hide("homeError");
+    renderHomeUpscale();
+    rerenderResultRows();
+    send({cmd: op});
+  }
+
+  function onRecraft(msg){
+    var res = $("recraftResult");
+    if (msg.op) state.recraftOp = msg.op;
+    if (msg.stage === "running") {
+      state.recraft = "running";
+    } else {
+      state.recraft = "idle";
+      if (msg.ok) {
+        res.className = "inline-ok";
+        res.textContent = T(state.recraftOp === "vectorize" ? "me.recraft.done.vectorize" : "me.recraft.done.removeBg");
+        res.hidden = false;
+      } else if (msg.code === "E_CANCELLED") {
+        res.hidden = true;
+      } else {
+        res.className = "inline-error";
+        res.textContent = msg.error || T("me.common.error.unknown");
+        res.hidden = false;
+      }
+    }
+    renderHomeUpscale();
+    rerenderResultRows();
+  }
+
+  function onRecraftKey(msg){
+    if (!msg.ok) {
+      $("recraftSaveError").textContent = msg.error || T("me.settings.recraft.saveFailed");
+      show("recraftSaveError");
+      hide("recraftSaved");
+      return;
+    }
+    hide("recraftSaveError");
+    state.hasRecraftKey = !!msg.saved;
+    $("recraftKey").value = "";
+    if (msg.saved) { show("recraftSaved"); setTimeout(function(){ hide("recraftSaved"); }, 2500); }
+    else hide("recraftSaved");
+    renderHomeUpscale();
+  }
+
+  $("removeBgBtn").addEventListener("click", function(){ startRecraft("removeBackground"); });
+  $("vectorizeBtn").addEventListener("click", function(){ startRecraft("vectorize"); });
+  $("recraftCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
+  $("recraftHintSettings").addEventListener("click", function(){ openSettings(); $("recraftKey").focus(); });
+  $("saveRecraftKey").addEventListener("click", function(){
+    send({cmd:"saveRecraftKey", key: $("recraftKey").value.trim()});
+  });
 
   $("refineInstruction").addEventListener("input", renderRefine);
   $("refineBtn").addEventListener("click", function(){
@@ -1660,6 +1793,9 @@
     $("qualitySlider").value = QUALITY_LEVELS.indexOf(state.extractionQuality);
     updateQualityTicks();
     $("openaiKey").value = "";
+    $("recraftKey").value = "";
+    hide("recraftSaved");
+    hide("recraftSaveError");
     $("currentPassword").value = "";
     $("newPassword").value = "";
     $("newPasswordConfirm").value = "";

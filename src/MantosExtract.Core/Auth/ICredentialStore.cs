@@ -17,5 +17,12 @@ namespace MantosExtract.Core.Auth
         string? LoadOpenAiKey();
         void SaveOpenAiKey(string apiKey);
         void ClearOpenAiKey();
+
+        // Chave da Recraft do tenant (BYOK, Dave 2026-09-20) — espelho exato da chave OpenAI, no
+        // mesmo cofre. Ao contrário da OpenAI, SaveRecraftKey LANÇA se não conseguiu gravar (a
+        // OpenAI engole a falha e o Bridge responde "salvo" mesmo assim — bug conhecido, não herdado).
+        string? LoadRecraftKey();
+        void SaveRecraftKey(string apiKey);
+        void ClearRecraftKey();
     }
 }

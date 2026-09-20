@@ -60,7 +60,10 @@ namespace MantosExtract.Interop
         /// com o MESMO tamanho físico em mm e o nome dela + <paramref name="nameSuffix"/>. O original
         /// não é tocado — fica recuperável. Devolve false, sem importar nada, quando o original foi
         /// apagado à mão pelo operador.</summary>
-        bool PlaceBesideTrackedShape(string key, string pngPath, string nameSuffix);
+        /// <param name="isVector">true = o arquivo é um SVG (vetorizar, Recraft — Dave 2026-09-20):
+        /// importa pelo filtro SVG, agrupa se vier em vários objetos e encaixa por escala UNIFORME
+        /// dentro da caixa do original (o SVG não tem a proporção exata do bitmap).</param>
+        bool PlaceBesideTrackedShape(string key, string pngPath, string nameSuffix, bool isVector = false);
 
         /// <summary>Active page bounding box in millimetres, used to place the first imported
         /// element sensibly when there is no prior element to lay out next to.</summary>

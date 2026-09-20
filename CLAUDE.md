@@ -105,6 +105,26 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   Lógica do Bridge em `MantosExtractBridge.Refine.cs` (partial — o Bridge principal passa de 900
   linhas, dívida técnica aceita pelo Dave em 2026-09-18).
 
+## Remover fundo e vetorizar — Recraft BYOK (Dave, 2026-09-20)
+
+- **Duas capacidades independentes** (`POST /mantos-extract/remove-background` e `/vectorize`), botões
+  só com ILUSTRAÇÃO na tela inicial. Nunca encadear `removeBackground` sobre SVG (o teste de
+  2026-09-19 mostrou que piora); quem quer vetor sem fundo remove o fundo e vetoriza a peça nova.
+- **Chave da Recraft é BYOK**, espelho da OpenAI: Configurações → DPAPI (`recraft.bin`) →
+  `X-Recraft-Api-Key`. Sem chave, os botões aparecem desabilitados com aviso nas 3 línguas. Ao
+  contrário da chave OpenAI, `SaveRecraftKey` lança se a gravação falhar (a OpenAI engole a falha).
+- **A Recraft só é chamada pelo mantosfc**, nunca direto do addin. Sem débito de crédito (M2/M3): o
+  custo (US$ 0,01 por chamada no teste) é da chave do tenant. Client único no servidor (60 s por
+  tentativa, no máximo 1 retry só em rede/5xx); limites de entrada (256..4096 px, 16 MP, 10 MB)
+  ajustados no servidor.
+- **Erros:** 401/403 da Recraft viram 422 `E_RECRAFT_INVALID_KEY` (NUNCA 401: o addin trata 401 como
+  sessão expirada e leva à tela de login). O addin traduz o CÓDIGO em chave i18n
+  (`RecraftErrorMessages`), não mostra o texto fixo em pt-BR do servidor. SUPOSIÇÃO a validar: a
+  doc da Recraft não documenta o corpo de erro nem o status de "sem créditos".
+- **No Corel:** o resultado entra AO LADO do original, mesmo tamanho físico (`RefinePlacement` +
+  `RecraftPlacement.FitInside`, escala uniforme pro SVG). Import de SVG usa `cdrSVG = 1345` e agrupa
+  se o Corel devolver vários objetos — **comportamento ainda não confirmado no Corel real**.
+
 ## Upscale — processo externo, não biblioteca embutida
 
 Real-ESRGAN NCNN-Vulkan (binário standalone, sem Python), invocado como **processo externo**
@@ -309,9 +329,9 @@ Dois pontos de atenção:
 |----|-------|
 | M1 | Detecção NÃO é corte final — é sugestão visual; usuário confirma cada elemento antes de extrair (spec §2) |
 | M2 | ~~Detecção debita 1 crédito (Dave, 2026-09-03)~~ → **Revogada 2026-09-07: Mantos Extract não debita crédito (nem detecção, nem extração)** — BYOK + plano já pago tornava a cobrança dupla sem sentido; uso continua logado em `generations` pra eventual limite por plano futuro |
-| M3 | Chave OpenAI é BYOK por tenant, igual Gemini hoje (Dave, 2026-09-03) — nunca chave única da plataforma |
+| M3 | Chave OpenAI é BYOK por tenant, igual Gemini hoje (Dave, 2026-09-03) — nunca chave única da plataforma. **Desde 2026-09-20 a chave da Recraft também é BYOK**, no mesmo molde (header `X-Recraft-Api-Key`, DPAPI no cliente, 422 `E_MISSING_RECRAFT_KEY` sem fallback de servidor) |
 | M4 | Sessão de operador (Bearer/mantosfc) e chave OpenAI (BYOK) são independentes de `LicenseClient.cs`/HWID+Ed25519 do SisCut — nunca reusar aquele fluxo pra login |
 | M5 | Upscale é processo externo (Real-ESRGAN NCNN-Vulkan via IPC por arquivo, padrão `EngineRunner.cs`), nunca lib embutida no shim nem dependência de Python |
-| M6 | Só bitmap/PNG com transparência — sem SVG, sem DXF, sem fitting de molde (isso é SISBOLT) |
-| M7 | Sem abstração de troca de provider de IA — é OpenAI direto nos endpoints novos |
+| M6 | ~~Só bitmap/PNG com transparência — sem SVG~~ → **Revogada em 2026-09-20 quanto ao SVG**: a vetorização (Recraft `vectorize`) devolve SVG, que passa a ser saída válida e entra no Corel ao lado do bitmap. Continua valendo: sem DXF e sem fitting de molde (isso é SISBOLT) |
+| M7 | Sem abstração de troca de provider de IA — é OpenAI direto nos endpoints novos. **A Recraft não é troca de provider, é capacidade nova**: client dedicado (`recraft_client.ts`), sem interface genérica de provider |
 | M8 | Fator de upscale é sempre 2× fixo sobre o resultado da extração — nenhuma tabela de mm/px por tipo de peça |

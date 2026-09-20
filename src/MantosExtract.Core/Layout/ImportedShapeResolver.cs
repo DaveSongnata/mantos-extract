@@ -30,5 +30,19 @@ namespace MantosExtract.Core.Layout
 
             return -1;
         }
+
+        /// <summary>Índices (0-based, na ordem da lista) de TODOS os shapes cujo ID não existia
+        /// antes. Pra import de SVG, que o Corel pode devolver como vários objetos de topo — o
+        /// chamador os agrupa numa peça só.</summary>
+        public static List<int> IndicesOfNewShapes(ICollection<int> idsBefore, IList<int> idsAfter)
+        {
+            var result = new List<int>();
+            if (idsBefore == null || idsAfter == null) return result;
+
+            for (int i = 0; i < idsAfter.Count; i++)
+                if (!idsBefore.Contains(idsAfter[i])) result.Add(i);
+
+            return result;
+        }
     }
 }

@@ -117,12 +117,12 @@ namespace MantosExtract.AddIn.Ui
         /// <summary>Grava o bitmap selecionado em resolução NATIVA e com transparência (mesmo
         /// caminho do upscale da seleção) e passa a rastreá-lo, pra o resultado entrar ao lado
         /// dele. Lança se a seleção não for exatamente um bitmap.</summary>
-        private byte[] ReadSelectedBitmap()
+        private byte[] ReadSelectedBitmap(string trackKey = RefineSourceKey)
         {
             string sourcePath = Path.Combine(WorkDir(), "refino-origem-" + Guid.NewGuid().ToString("N") + ".png");
             try
             {
-                MantosExtractLog.Write("[refino] seleção lida: " + _corel.SaveSelectedBitmapForUpscale(sourcePath, RefineSourceKey));
+                MantosExtractLog.Write("[refino] seleção lida: " + _corel.SaveSelectedBitmapForUpscale(sourcePath, trackKey));
                 return File.ReadAllBytes(sourcePath);
             }
             finally

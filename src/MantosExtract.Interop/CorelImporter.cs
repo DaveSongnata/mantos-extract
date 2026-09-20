@@ -23,7 +23,17 @@ namespace MantosExtract.Interop
         /// <summary>Imports <paramref name="pngPath"/> into <paramref name="document"/>'s
         /// active layer and returns the imported shape (as <c>dynamic</c>) at whatever
         /// position/size Corel gave it.</summary>
-        public static dynamic Import(dynamic application, dynamic document, string pngPath)
+        public static dynamic Import(dynamic application, dynamic document, string pngPath) =>
+            ImportCore(application, document, pngPath, CorelConstants.CdrFilterPng, groupIfSeveral: false);
+
+        /// <summary>Importa o SVG da Recraft (vetorizar, Dave 2026-09-20). O Corel pode devolver um
+        /// grupo OU vários objetos de topo — vários viram um grupo só, pra o resultado ser UMA peça
+        /// que se move e escala junta. UNCONFIRMED até rodar no Corel real (nenhum projeto irmão
+        /// importa SVG): o docker.log registra quantos objetos vieram e se houve agrupamento.</summary>
+        public static dynamic ImportSvg(dynamic application, dynamic document, string svgPath) =>
+            ImportCore(application, document, svgPath, CorelConstants.CdrFilterSvg, groupIfSeveral: true);
+
+        private static dynamic ImportCore(dynamic application, dynamic document, string pngPath, int filter, bool groupIfSeveral)
         {
             dynamic layer = document.ActiveLayer;
             List<int>? idsBefore = ReadStaticIds(layer);
@@ -38,11 +48,13 @@ namespace MantosExtract.Interop
             // same treatment: never omit a trailing optional COM parameter via InvokeMember.
             dynamic options = application.CreateStructImportOptions();
             InvokeMember((object)layer, "Import",
-                new object[] { pngPath, CorelConstants.CdrFilterPng, (object)options });
+                new object[] { pngPath, filter, (object)options });
 
             // Primeiro pela diferença de StaticID (definitivo); a seleção só como último recurso,
             // e só se a leitura dos IDs de antes falhou — nunca devolve uma peça que já existia.
-            dynamic? imported = idsBefore != null ? FindNewShape(layer, idsBefore) : null;
+            dynamic? imported = idsBefore != null
+                ? (groupIfSeveral ? FindNewShapeOrGroup(application, layer, idsBefore) : FindNewShape(layer, idsBefore))
+                : null;
             string how = "diferença de StaticID";
             if (imported == null && idsBefore == null)
             {
@@ -121,6 +133,25 @@ namespace MantosExtract.Interop
             int index = ImportedShapeResolver.IndexOfNewShape(new HashSet<int>(idsBefore), after, preferredIndex: 0);
             if (index < 0) return null;
             try { return layer.Shapes[index + 1]; } catch { return null; }
+        }
+
+        /// <summary>Todos os shapes novos da camada; se for mais de um, agrupa (IVGShapeRange.Add /
+        /// Group, typelib linhas 6266 e 6280) e devolve o grupo. Tudo por InvokeMember.</summary>
+        private static dynamic? FindNewShapeOrGroup(dynamic application, dynamic layer, List<int> idsBefore)
+        {
+            List<int>? after = ReadStaticIds(layer);
+            if (after == null) return null;
+            List<int> indices = ImportedShapeResolver.IndicesOfNewShapes(new HashSet<int>(idsBefore), after);
+            InteropLog.Write("importar SVG: " + indices.Count + " objeto(s) novo(s) de topo");
+            if (indices.Count == 0) return null;
+            if (indices.Count == 1) { try { return layer.Shapes[indices[0] + 1]; } catch { return null; } }
+
+            object range = application.CreateShapeRange();
+            foreach (int index in indices)
+                InvokeMember(range, "Add", new object[] { (object)layer.Shapes[index + 1] });
+            object? grouped = InvokeMember(range, "Group", Array.Empty<object>());
+            InteropLog.Write("importar SVG: " + indices.Count + " objetos agrupados numa peça só");
+            return grouped;
         }
 
         private static object? InvokeMember(object com, string method, object[] args) =>

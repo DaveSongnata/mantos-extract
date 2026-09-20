@@ -38,5 +38,24 @@ namespace MantosExtract.Core.Tests.Layout
         {
             Assert.Equal(0, ImportedShapeResolver.IndexOfNewShape(new HashSet<int>(), new List<int> { 7 }));
         }
+
+        [Fact]
+        public void IndicesOfNewShapes_ReturnsEveryNewIdInOrder_ForImportsThatCreateSeveralObjects()
+        {
+            // Import de SVG: o Corel pode devolver vários objetos de topo em vez de um grupo.
+            var before = new HashSet<int> { 1, 2 };
+
+            Assert.Equal(new[] { 2, 3, 4 }, ImportedShapeResolver.IndicesOfNewShapes(before, new List<int> { 1, 2, 30, 31, 32 }));
+        }
+
+        [Fact]
+        public void IndicesOfNewShapes_NothingNew_IsEmpty_AndNullInputsAreSafe()
+        {
+            var before = new HashSet<int> { 1, 2 };
+
+            Assert.Empty(ImportedShapeResolver.IndicesOfNewShapes(before, new List<int> { 2, 1 }));
+            Assert.Empty(ImportedShapeResolver.IndicesOfNewShapes(null!, new List<int> { 1 }));
+            Assert.Empty(ImportedShapeResolver.IndicesOfNewShapes(before, null!));
+        }
     }
 }

@@ -17,6 +17,8 @@ namespace MantosExtract.Interop
 
         // ENUM cdrFilter (export/import filter ids)
         public const int CdrFilterPng = 802;
+        // cdrFilter.cdrSVG = 1345 (vgcore-tlb-dump.txt:598) — import do vetor da Recraft (Dave, 2026-09-20).
+        public const int CdrFilterSvg = 1345;
         // cdrCompressionType.cdrCompressionNone = 0 (vgcore-tlb-dump.txt) — usado no IVGBitmap.SaveAs.
         public const int CdrCompressionNone = 0;
 

@@ -380,7 +380,7 @@ namespace MantosExtract.Interop
             return true;
         }
 
-        public bool PlaceBesideTrackedShape(string key, string pngPath, string nameSuffix)
+        public bool PlaceBesideTrackedShape(string key, string pngPath, string nameSuffix, bool isVector = false)
         {
             using var _ = new CorelDocumentState(_app);
             InteropLog.Write("refino '" + key + "': colocar " + System.IO.Path.GetFileName(pngPath) + " ao lado (" + InteropLog.PngInfo(pngPath) + ")");
@@ -408,17 +408,31 @@ namespace MantosExtract.Interop
             string? oldName = null;
             try { oldName = (string)((dynamic)tracked).Name; } catch { /* nome é cosmético */ }
 
-            dynamic imported = CorelImporter.Import(_app, _app.ActiveDocument, pngPath);
+            dynamic imported = isVector
+                ? CorelImporter.ImportSvg(_app, _app.ActiveDocument, pngPath)
+                : CorelImporter.Import(_app, _app.ActiveDocument, pngPath);
             _lastImportedShape = imported;
             try { imported.Name = (string.IsNullOrEmpty(oldName) ? "Bitmap" : oldName) + nameSuffix; } catch { }
 
             // Tamanho primeiro, posição depois (mexer no tamanho move a âncora no Corel): a peça
             // nova tem a resolução que a IA gerou, mas o tamanho FÍSICO do original.
             var (newLeft, newBottom) = MantosExtract.Core.Layout.RefinePlacement.Beside(leftMm, bottomMm, widthMm);
+            double fitWidth = widthMm, fitHeight = heightMm;
+            if (isVector)
+            {
+                // SVG não tem pixels nem a proporção exata do bitmap: escala uniforme pra caber na
+                // caixa do original. Tamanho nativo ilegível cai na caixa do original (sem NaN).
+                try
+                {
+                    (fitWidth, fitHeight) = MantosExtract.Core.Layout.RecraftPlacement.FitInside(
+                        widthMm, heightMm, (double)imported.SizeWidth, (double)imported.SizeHeight);
+                }
+                catch (Exception ex) { InteropLog.Write("refino '" + key + "': tamanho nativo do SVG ilegível (" + InteropLog.Describe(ex) + ")"); }
+            }
             try
             {
-                imported.SizeWidth = widthMm;
-                imported.SizeHeight = heightMm;
+                imported.SizeWidth = fitWidth;
+                imported.SizeHeight = fitHeight;
                 imported.LeftX = newLeft;
                 imported.BottomY = newBottom;
             }
