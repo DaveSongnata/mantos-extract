@@ -155,19 +155,18 @@
   .modal-pieces{padding:0 12px;font-weight:900;text-transform:uppercase;font-size:11px;letter-spacing:.02em;}
   .modal-body{padding:0 12px;font-size:12px;line-height:1.45;}
   .modal .primary,.modal .secondary{margin:0 12px;width:auto;}
-  /* Refino por prompt livre (Dave, 2026-09-18): sempre disponível na tela inicial. Mesmo idioma
-     dos campos de formulário — borda dura, raio zero, sem sombra. */
-  .home-refine{display:flex;flex-direction:column;gap:8px;border-top:var(--lw) solid var(--ink);padding-top:12px;}
-  .home-refine label{margin-bottom:0;}
-  .home-refine .help-text{margin:0;}
-  .home-refine textarea{
-    width:100%;min-height:64px;resize:vertical;background:var(--surface);
-    border:var(--lw) solid var(--ink);color:var(--ink);font-family:var(--font-body);
-    font-size:13px;padding:9px 10px;border-radius:0;
+  /* Refino por prompt livre (Dave, 2026-09-18): botão na tela inicial que abre este modal
+     (Dave, 2026-09-20). Mesmo idioma dos campos de formulário — borda dura, raio zero, sem sombra. */
+  .refine-modal .help-text{margin:0;padding:0 12px;}
+  .refine-modal textarea{
+    display:block;width:calc(100% - 24px);margin:0 12px;min-height:72px;resize:vertical;
+    background:var(--surface);border:var(--lw) solid var(--ink);color:var(--ink);
+    font-family:var(--font-body);font-size:13px;padding:9px 10px;border-radius:0;
   }
-  .home-refine textarea::placeholder{color:var(--gray);opacity:1;}
-  .home-refine textarea:focus-visible{outline:2px solid var(--accent-dark);outline-offset:0;}
-  .home-refine textarea:disabled{opacity:.5;}
+  .refine-modal textarea::placeholder{color:var(--gray);opacity:1;}
+  .refine-modal textarea:focus-visible{outline:2px solid var(--accent-dark);outline-offset:0;}
+  .refine-modal textarea:disabled{opacity:.5;}
+  .refine-modal .home-upscale-running,.refine-modal .inline-ok,.refine-modal .inline-error{margin:0 12px;}
   .home-upscale-running{display:flex;align-items:center;justify-content:center;gap:8px;
     font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.02em;
     border:var(--lw) solid var(--ink);padding:10px;}
@@ -559,20 +558,27 @@
         <div id="homeUpscaleResult" class="inline-error" hidden></div>
       </div>
 
-      <!-- Refino por prompt livre (Dave, 2026-09-18): qualquer imagem selecionada, sempre disponível -->
-      <div id="homeRefineBox" class="home-refine">
-        <label for="refineInstruction" data-i18n="me.refine.title">Refinar com IA</label>
+      <!-- Refino por prompt livre (Dave, 2026-09-18): qualquer imagem selecionada. O botão abre o
+           modal #refineModal (Dave, 2026-09-20), que guarda o campo e o resultado. -->
+      <button type="button" id="refineOpenBtn" class="secondary" disabled data-i18n="me.refine.title">Refinar com IA</button>
+    </section>
+
+    <!-- Modal do refino: fora das telas de propósito (aberto pela tela inicial e pela de resultado). -->
+    <div id="refineModal" class="modal-backdrop" hidden>
+      <div class="modal refine-modal" role="dialog" aria-labelledby="refineModalTitle">
+        <div class="bar"><span class="tab" aria-hidden="true"></span><span id="refineModalTitle" data-i18n="me.refine.title">Refinar com IA</span></div>
         <p class="help-text" data-i18n="me.refine.help"></p>
         <textarea id="refineInstruction" maxlength="500" rows="3" data-i18n-placeholder="me.refine.placeholder"></textarea>
-        <button type="button" id="refineBtn" class="secondary" disabled data-i18n="me.refine.button">Refinar</button>
+        <button type="button" id="refineBtn" class="primary" disabled data-i18n="me.refine.button">Refinar</button>
         <div id="refineRunning" class="home-upscale-running" hidden>
           <span data-i18n="me.refine.running">Refinando...</span>
           <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
           <button type="button" class="row-cancel" id="refineCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
         </div>
         <div id="refineResult" class="inline-error" hidden></div>
+        <button type="button" id="refineClose" class="secondary" data-i18n="me.refine.close">Fechar</button>
       </div>
-    </section>
+    </div>
 
     <!-- Modal do modelo anterior (Dave, 2026-09-18): fora das telas de propósito - é aberto tanto pela extração (tela de resultado) quanto pelo refino (tela inicial). -->
     <div id="legacyModelModal" class="modal-backdrop" hidden>
@@ -1403,14 +1409,30 @@
   $("homeUpscaleCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
   // ---- refino por prompt livre (Dave, 2026-09-18) --------------------------------------------
   // Qualquer bitmap selecionado no Corel + uma instrução; o resultado entra AO LADO do original.
-  // Sempre disponível na tela inicial (e um atalho na tela de resultado).
+  // Botão na tela inicial (e atalho na tela de resultado) que abre o modal com o campo.
   function renderRefine(){
     var running = state.refine === "running";
     var typed = $("refineInstruction").value.trim().length;
+    // O botão da home só trava por falta de seleção ou por OUTRA operação em andamento; o refino
+    // rodando não o trava (reabre o modal pra ver o progresso).
+    $("refineOpenBtn").disabled = !state.selIsBitmap || (upscaleBusy() && !running);
     $("refineBtn").hidden = running;
     $("refineBtn").disabled = !state.selIsBitmap || upscaleBusy() || typed < 3;
     $("refineRunning").hidden = !running;
     $("refineInstruction").disabled = running;
+    // Fechar enquanto roda deixaria o operador sem ver o progresso nem o cancelar.
+    $("refineClose").disabled = running;
+  }
+
+  function openRefineModal(){
+    $("refineModal").hidden = false;
+    renderRefine();
+    $("refineInstruction").focus();
+  }
+  function closeRefineModal(){
+    if (state.refine === "running") return;
+    $("refineModal").hidden = true;
+    $("refineResult").hidden = true;
   }
 
   function startRefine(){
@@ -1449,14 +1471,16 @@
   $("refineInstruction").addEventListener("input", renderRefine);
   $("refineBtn").addEventListener("click", function(){
     if (upscaleBusy() || !state.selIsBitmap) return;
-    if (!state.hasOpenAiKey) { openSettings({nudgeKey: true}); return; }
+    if (!state.hasOpenAiKey) { closeRefineModal(); openSettings({nudgeKey: true}); return; }
     startRefine();
   });
   $("refineCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
+  $("refineOpenBtn").addEventListener("click", openRefineModal);
+  $("refineClose").addEventListener("click", closeRefineModal);
   $("resultRefineBtn").addEventListener("click", function(){
     showScreen("screen-home");
     send({cmd:"status"});
-    $("refineInstruction").focus();
+    openRefineModal();
   });
   $("copyrightModalOk").addEventListener("click", function(){ $("copyrightModal").hidden = true; });
 

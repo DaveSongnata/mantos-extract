@@ -132,6 +132,7 @@ namespace MantosExtract.Core.I18n
             ["me.refine.help"] = "Select an image in CorelDRAW and describe the change. The original stays as it is and the new version is placed next to it.",
             ["me.refine.placeholder"] = "E.g.: remove the person inside the car",
             ["me.refine.button"] = "Refine",
+            ["me.refine.close"] = "Close",
             ["me.refine.running"] = "Refining...",
             ["me.refine.done"] = "Done: the refined version was placed next to the original.",
             ["me.refine.error.tooShort"] = "Describe the change with at least 3 letters.",
