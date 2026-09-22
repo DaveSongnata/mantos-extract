@@ -6,6 +6,34 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-22 — Refino com imagem de referência opcional
+
+Versão 0.9.11. Pedido do Dave: no refino, o operador quer apontar pra imagem ORIGINAL de onde a peça
+saiu ("baseado na foto original, ajeite a posição do Zeus"). Dave escolheu a opção A (seleção
+explícita) contra o vínculo automático peça→foto, porque o refino vale pra qualquer bitmap (não só
+peças extraídas) e a foto original costuma ser apagada do documento depois da extração.
+
+- **Modal com duas vagas:** "imagem a alterar" e "referência (opcional)", cada uma com "Usar
+  seleção" e miniatura. Vagas explícitas em vez de "selecione as duas": a ordem da seleção
+  múltipla do Corel não diz qual é qual. Abrir o modal zera as vagas (nunca herdar a referência de
+  outra peça) e já preenche a imagem a alterar com a seleção atual, então o fluxo antigo não mudou.
+- **Rastreio provisório:** a seleção é lida com a chave `__refine_pending__` e só vira
+  `__refine_source__` (ao lado de quem o resultado entra) depois que a vaga aceita. Sem isso, uma
+  leitura recusada (referência igual à imagem a alterar) já teria trocado o shape rastreado.
+  `ICorelHost.CopyTracking` copia a referência COM e o StaticID, sem chamada COM.
+- **Servidor** (mantosfc): campo multipart opcional `reference` em `/mantos-extract/refine`
+  (inválido = 422 `E_INVALID_REFERENCE`). Pra OpenAI as duas vão como `image[]`, forma documentada
+  pra várias imagens, com a editada PRIMEIRO (a OpenAI trata a primeira como principal). A
+  referência é reduzida a 2048 px no lado maior (só consulta; poupa tokens da chave BYOK); a editada
+  nunca é reduzida. O prompt diz que a primeira é a saída, a segunda só consulta, e que "a
+  original"/"a referência" no pedido é a segunda. Sem crédito (M2); `generations` registra
+  `hasReference`.
+- **Não validado:** o efeito real da referência na qualidade do refino com o `gpt-image-2.5-flare`
+  (nenhuma chamada paga foi feita) e o teste funcional do `E_INVALID_REFERENCE` (precisa de
+  Postgres, não roda na máquina de dev).
+
+---
+
 ## 2026-09-20 — Remover fundo e vetorizar via Recraft (BYOK) + refino em modal
 
 Versão 0.9.7 (refino num modal, botão na Home) e 0.9.8 (Recraft). Continua sem crédito (M2/M3): o

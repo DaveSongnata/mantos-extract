@@ -29,6 +29,7 @@
   ];
 
   var credits = 42;
+  var refineSlots = { target: null, reference: null };
 
   function reply(msg) { setTimeout(function () { window.mantosExtractReceive(msg); }, 250); }
 
@@ -50,6 +51,24 @@
           break;
         case "idioma":
           break; // o host real recarrega a página inteira; nada pra simular aqui
+        // Vagas do modal de refino: a imagem a alterar já vem preenchida ao abrir, e a referência
+        // entra pelo "Usar seleção" — mesmo contrato do MantosExtractBridge.Refine.cs.
+        case "refineOpen":
+          refineSlots = { target: { url: SAMPLE_IMAGE }, reference: null };
+          reply({ type: "refineSlots", target: refineSlots.target, reference: null });
+          break;
+        case "refineCapture":
+          refineSlots[cmd.slot] = { url: SAMPLE_IMAGE };
+          reply({ type: "refineSlots", target: refineSlots.target, reference: refineSlots.reference });
+          break;
+        case "refineClear":
+          refineSlots[cmd.slot] = null;
+          reply({ type: "refineSlots", target: refineSlots.target, reference: refineSlots.reference });
+          break;
+        case "refine":
+          reply({ type: "refine", stage: "running" });
+          setTimeout(function () { window.mantosExtractReceive({ type: "refine", stage: "done", ok: true }); }, 1500);
+          break;
         case "detect":
           reply({ type: "detectProgress", stage: "exporting" });
           setTimeout(function () { window.mantosExtractReceive({ type: "detectProgress", stage: "detecting" }); }, 400);

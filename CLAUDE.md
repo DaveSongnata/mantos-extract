@@ -104,6 +104,14 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   cliente reenvia a imagem inteira, resultado entra AO LADO do original (`RefinePlacement`).
   Lógica do Bridge em `MantosExtractBridge.Refine.cs` (partial — o Bridge principal passa de 900
   linhas, dívida técnica aceita pelo Dave em 2026-09-18).
+- **Referência opcional no refino (Dave, 2026-09-22, "opção A"):** o modal tem duas vagas, "imagem
+  a alterar" e "referência (opcional)", cada uma preenchida com o botão "Usar seleção"
+  (`RefineSelection`, Core). É pro caso "ajeite a posição do Zeus como na foto original". Sempre
+  explícito, nunca adivinhado: a ordem da seleção múltipla do Corel não é confiável e a foto original
+  costuma ser APAGADA do documento depois da extração. Abrir o modal zera as vagas e já preenche a
+  imagem a alterar com a seleção atual. A referência vai no campo multipart `reference`; o servidor
+  manda as duas pra OpenAI como `image[]` (a editada PRIMEIRO), reduz a referência a 2048 px e o
+  prompt diz qual imagem é a saída. Referência igual à imagem a alterar é recusada.
 
 ## Remover fundo e vetorizar — Recraft BYOK (Dave, 2026-09-20)
 

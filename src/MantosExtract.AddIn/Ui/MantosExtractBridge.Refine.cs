@@ -10,10 +10,16 @@ using MantosExtract.Windows;
 namespace MantosExtract.AddIn.Ui
 {
     /// <summary>
-    /// Refino por prompt livre (Dave, 2026-09-18): o operador seleciona QUALQUER bitmap no Corel —
+    /// Refino por prompt livre (Dave, 2026-09-18): o operador escolhe QUALQUER bitmap do Corel —
     /// uma peça recém extraída ou um elemento qualquer do canvas —, descreve a alteração e recebe
     /// a versão ajustada AO LADO do original (que fica intacto e recuperável). Um arquivo à parte
     /// (partial) só pra não engordar mais o MantosExtractBridge.cs.
+    ///
+    /// Duas vagas desde 2026-09-22 (Dave, "opção A"): "imagem a alterar" e "referência
+    /// (opcional)", cada uma preenchida pelo botão "Usar seleção" do modal. A referência é o caso
+    /// "ajeite a posição do Zeus como na foto original": vai pro servidor como imagem só de
+    /// consulta. Abrir o modal zera as duas vagas e já preenche a imagem a alterar com a seleção
+    /// atual, se houver — o fluxo de sempre (selecionar, abrir, escrever, refinar) continua igual.
     ///
     /// Shell burro, como o resto do bridge: lê a seleção, manda pro mantosfc e coloca o resultado.
     /// Modelo, preset, tamanho e prompt são decisão do servidor; o preset é o mesmo do slider das
@@ -23,7 +29,89 @@ namespace MantosExtract.AddIn.Ui
     public sealed partial class MantosExtractBridge
     {
         private const string RefineSourceKey = "__refine_source__";
+        private const string RefineReferenceKey = "__refine_reference__";
+        // A seleção é lida com esta chave e só vira RefineSourceKey depois que a vaga aceita:
+        // uma leitura recusada nunca pode mudar AO LADO DE QUEM o resultado vai entrar.
+        private const string RefinePendingKey = "__refine_pending__";
         private const string RefinedNameSuffix = " (refinado)";
+
+        private readonly RefineSelection _refineSelection = new RefineSelection();
+        private string? _refineTargetThumb;
+        private string? _refineReferenceThumb;
+
+        /// <summary>Modal aberto: zera as vagas (nunca herdar a referência de outro trabalho) e
+        /// preenche a imagem a alterar com a seleção atual, se ela for um bitmap.</summary>
+        private void RefineOpen()
+        {
+            _refineSelection.Reset();
+            _refineTargetThumb = ReplaceThumb(_refineTargetThumb, null);
+            _refineReferenceThumb = ReplaceThumb(_refineReferenceThumb, null);
+
+            string? error = null;
+            if (_corel.SelectionIsSingleBitmap) error = CaptureRefineSlot(RefineSlot.Target);
+            // Sem seleção ao abrir não é erro: a vaga só fica vazia esperando o "Usar seleção".
+            PostRefineSlots(error);
+        }
+
+        private void RefineCapture(string slotRaw)
+        {
+            if (!RefineSelection.TryParseSlot(slotRaw, out RefineSlot slot))
+            {
+                MantosExtractLog.Write("Refino: vaga desconhecida '" + slotRaw + "'");
+                return;
+            }
+            string? error = _corel.SelectionIsSingleBitmap
+                ? CaptureRefineSlot(slot)
+                : L("me.refine.slot.noSelection");
+            PostRefineSlots(error);
+        }
+
+        private void RefineClear(string slotRaw)
+        {
+            if (!RefineSelection.TryParseSlot(slotRaw, out RefineSlot slot)) return;
+            _refineSelection.Clear(slot);
+            if (slot == RefineSlot.Target) _refineTargetThumb = ReplaceThumb(_refineTargetThumb, null);
+            else _refineReferenceThumb = ReplaceThumb(_refineReferenceThumb, null);
+            PostRefineSlots(null);
+        }
+
+        /// <summary>Lê a seleção pra vaga. Devolve null se deu certo, ou a mensagem pro operador.</summary>
+        private string? CaptureRefineSlot(RefineSlot slot)
+        {
+            byte[] png;
+            try { png = ReadSelectedBitmap(RefinePendingKey); }
+            catch (Exception ex)
+            {
+                // Detalhe técnico da camada COM vai pro log; o operador recebe o que fazer.
+                MantosExtractLog.Write("Refino: leitura da seleção (" + slot + ") FALHOU: " + ex);
+                return L("me.refine.error.selection");
+            }
+
+            string? code = _refineSelection.Set(slot, png);
+            if (code == RefineSelection.SameImageCode) return L("me.refine.error.sameImage");
+
+            string thumb;
+            try { thumb = WriteRefineThumb(png); }
+            catch (Exception ex)
+            {
+                // Sem miniatura a vaga continua valendo; a tela só não mostra a imagem.
+                MantosExtractLog.Write("Refino: miniatura não gravada: " + ex);
+                thumb = "";
+            }
+
+            if (slot == RefineSlot.Target)
+            {
+                _corel.CopyTracking(RefinePendingKey, RefineSourceKey);
+                _refineTargetThumb = ReplaceThumb(_refineTargetThumb, thumb);
+            }
+            else
+            {
+                _corel.CopyTracking(RefinePendingKey, RefineReferenceKey);
+                _refineReferenceThumb = ReplaceThumb(_refineReferenceThumb, thumb);
+            }
+            MantosExtractLog.Write("Refino: vaga " + slot + " preenchida (" + png.Length + " bytes)");
+            return null;
+        }
 
         private async Task RunRefineAsync(string instruction, CancellationToken ct)
         {
@@ -44,25 +132,24 @@ namespace MantosExtract.AddIn.Ui
                 return;
             }
 
-            Post(new { type = "refine", stage = "running" });
-
-            byte[] sourceBytes;
-            try { sourceBytes = ReadSelectedBitmap(); }
-            catch (Exception ex)
+            if (_refineSelection.ValidateForRun() is string missing)
             {
-                // A mensagem da camada COM tem detalhe técnico (atributos do bitmap, HRESULT): vai
-                // pro log; o operador recebe uma frase que diz o que fazer.
-                MantosExtractLog.Write("Refino: leitura da seleção FALHOU: " + ex);
-                PostRefineDone(false, "E_SELECTION", L("me.refine.error.selection"));
+                PostRefineDone(false, missing, L("me.refine.error.noTarget"));
                 return;
             }
+            byte[] sourceBytes = _refineSelection.Target!;
+            byte[]? referenceBytes = _refineSelection.Reference;
+
+            Post(new { type = "refine", stage = "running" });
+            MantosExtractLog.Write("Refino: imagem " + sourceBytes.Length + " bytes, referência " +
+                (referenceBytes == null ? "nenhuma" : referenceBytes.Length + " bytes"));
 
             ExtractedImage refined;
             try
             {
                 refined = await _extractionClient
                     .RefineAsync(session.SessionId, openAiKey!, ExtractionQualityStore.Read(), sourceBytes,
-                                 "image/png", instruction, ct, _useLegacyImageModel)
+                                 "image/png", instruction, referenceBytes, ct, _useLegacyImageModel)
                     .ConfigureAwait(false);
             }
             catch (MantosExtractApiException ex)
@@ -115,9 +202,9 @@ namespace MantosExtract.AddIn.Ui
         }
 
         /// <summary>Grava o bitmap selecionado em resolução NATIVA e com transparência (mesmo
-        /// caminho do upscale da seleção) e passa a rastreá-lo, pra o resultado entrar ao lado
-        /// dele. Lança se a seleção não for exatamente um bitmap.</summary>
-        private byte[] ReadSelectedBitmap(string trackKey = RefineSourceKey)
+        /// caminho do upscale da seleção) e passa a rastreá-lo sob <paramref name="trackKey"/>.
+        /// Lança se a seleção não for exatamente um bitmap.</summary>
+        private byte[] ReadSelectedBitmap(string trackKey)
         {
             string sourcePath = Path.Combine(WorkDir(), "refino-origem-" + Guid.NewGuid().ToString("N") + ".png");
             try
@@ -129,6 +216,39 @@ namespace MantosExtract.AddIn.Ui
             {
                 try { File.Delete(sourcePath); } catch { /* arquivo de trabalho em %TEMP% */ }
             }
+        }
+
+        /// <summary>Miniatura da vaga, servida à página por https://mantosextract.assets/ (nunca
+        /// base64 pelo ExecuteScriptAsync — uma foto de celular tem vários MB).</summary>
+        private static string WriteRefineThumb(byte[] png)
+        {
+            string name = "refine_" + Guid.NewGuid().ToString("N") + ".png";
+            File.WriteAllBytes(Path.Combine(AssetsDir(), name), png);
+            return name;
+        }
+
+        /// <summary>Apaga a miniatura antiga da vaga e devolve a nova (ou null).</summary>
+        private static string? ReplaceThumb(string? oldName, string? newName)
+        {
+            if (!string.IsNullOrEmpty(oldName) && oldName != newName)
+            {
+                try { File.Delete(Path.Combine(AssetsDir(), oldName)); } catch { /* %TEMP% */ }
+            }
+            return newName;
+        }
+
+        private static object? ThumbSlot(byte[]? bytes, string? thumb) =>
+            bytes == null ? null : new { url = string.IsNullOrEmpty(thumb) ? "" : "https://mantosextract.assets/" + thumb };
+
+        private void PostRefineSlots(string? error)
+        {
+            Post(new
+            {
+                type = "refineSlots",
+                target = ThumbSlot(_refineSelection.Target, _refineTargetThumb),
+                reference = ThumbSlot(_refineSelection.Reference, _refineReferenceThumb),
+                error,
+            });
         }
 
         /// <summary>Refinos ficam numa pasta própria dentro de Extractions: o histórico só lista

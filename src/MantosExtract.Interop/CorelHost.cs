@@ -39,6 +39,16 @@ namespace MantosExtract.Interop
             InteropLog.Write("rastrear '" + key + "' -> " + InteropLog.ShapeInfo(shape) + " | rastreados: " + TrackedSummary());
         }
 
+        public bool CopyTracking(string fromKey, string toKey)
+        {
+            if (!_trackedShapes.TryGetValue(fromKey, out object? shape) || shape == null) return false;
+            _trackedShapes[toKey] = shape;
+            if (_trackedIds.TryGetValue(fromKey, out int id)) _trackedIds[toKey] = id;
+            else _trackedIds.Remove(toKey);
+            InteropLog.Write("rastreio '" + fromKey + "' copiado para '" + toKey + "' | rastreados: " + TrackedSummary());
+            return true;
+        }
+
         private string TrackedSummary()
         {
             var parts = new List<string>();

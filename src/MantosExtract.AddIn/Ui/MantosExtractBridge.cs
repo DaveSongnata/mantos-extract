@@ -125,6 +125,7 @@ namespace MantosExtract.AddIn.Ui
                 string elementId = "";
                 string device = "";
                 string instruction = "";
+                string slot = "";
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -141,6 +142,7 @@ namespace MantosExtract.AddIn.Ui
                     elementId = Str(root, "id");
                     device = Str(root, "device");
                     instruction = Str(root, "instruction");
+                    slot = Str(root, "slot");
                 }
 
                 // status/cancel/cancelElement furam o busy-guard de propósito: cancelar só faz
@@ -182,6 +184,12 @@ namespace MantosExtract.AddIn.Ui
                     case "cancel": _runningCts?.Cancel(); break;
                     case "cancelElement": CancelElement(elementId); break;
                     case "refine": RunAsync(ct => RunRefineAsync(instruction, ct)); break;
+                    // Vagas do modal de refino: leitura da seleção síncrona e curta, como o resto
+                    // das chamadas COM daqui — sem RunAsync, o busy-guard acima já as barra
+                    // enquanto um refino roda.
+                    case "refineOpen": RefineOpen(); break;
+                    case "refineCapture": RefineCapture(slot); break;
+                    case "refineClear": RefineClear(slot); break;
                     case "removeBackground": RunAsync(ct => RunRecraftAsync(MantosExtract.Core.Recraft.RecraftOperation.RemoveBackground, ct)); break;
                     case "vectorize": RunAsync(ct => RunRecraftAsync(MantosExtract.Core.Recraft.RecraftOperation.Vectorize, ct)); break;
 

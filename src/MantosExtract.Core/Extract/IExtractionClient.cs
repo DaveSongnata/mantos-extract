@@ -19,9 +19,11 @@ namespace MantosExtract.Core.Extract
 
         /// <summary>Refino por prompt livre (Dave, 2026-09-18) — endpoint dedicado
         /// /mantos-extract/refine: QUALQUER bitmap (não só uma extração) + uma instrução em texto
-        /// livre; devolve a imagem alterada. O bitmap vai inteiro, sem redução.</summary>
+        /// livre; devolve a imagem alterada. O bitmap vai inteiro, sem redução.
+        /// <paramref name="referenceBytes"/> (opcional, Dave 2026-09-22) é uma segunda imagem só
+        /// de consulta — ex.: a foto de onde a peça saiu — que o operador escolheu no modal.</summary>
         Task<ExtractedImage> RefineAsync(string sessionId, string openAiApiKey, string quality,
-            byte[] imageBytes, string mimeType, string instruction, CancellationToken ct,
+            byte[] imageBytes, string mimeType, string instruction, byte[]? referenceBytes, CancellationToken ct,
             bool legacyModel = false);
     }
 }

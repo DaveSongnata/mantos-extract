@@ -55,6 +55,12 @@ namespace MantosExtract.Interop
         /// <returns>Linha pro log: atributos do bitmap e por qual via o arquivo saiu.</returns>
         string SaveSelectedBitmapForUpscale(string pngPath, string trackKey);
 
+        /// <summary>Passa a rastrear sob <paramref name="toKey"/> o mesmo shape de
+        /// <paramref name="fromKey"/>. Sem COM: só copia a referência e o StaticID. Existe pro
+        /// refino ler a seleção com uma chave provisória e só promovê-la depois de aceita (Dave,
+        /// 2026-09-22). Devolve false se <paramref name="fromKey"/> nunca foi rastreada.</summary>
+        bool CopyTracking(string fromKey, string toKey);
+
         /// <summary>Refino por prompt livre (Dave, 2026-09-18): importa <paramref name="pngPath"/> e
         /// coloca AO LADO da forma rastreada sob <paramref name="key"/> (Core.Layout.RefinePlacement),
         /// com o MESMO tamanho físico em mm e o nome dela + <paramref name="nameSuffix"/>. O original

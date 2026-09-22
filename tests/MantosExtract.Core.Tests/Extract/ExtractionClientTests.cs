@@ -267,15 +267,43 @@ namespace MantosExtract.Core.Tests.Extract
             var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
 
             ExtractedImage result = await client.RefineAsync("s1", "sk-key", "max", new byte[] { 9, 9, 9 },
-                "image/png", "remove a pessoa de dentro do carro", CancellationToken.None);
+                "image/png", "remove a pessoa de dentro do carro", null, CancellationToken.None);
 
             Assert.Equal("/api/v1/mantos-extract/refine", path);
             Assert.Contains("remove a pessoa de dentro do carro", body);
             Assert.Contains("name=instruction", body);
             Assert.Contains("name=image", body);
+            Assert.DoesNotContain("name=reference", body);
             Assert.Equal("max", preset);
             Assert.Equal("Bearer s1", bearer);
             Assert.Equal(new byte[] { 7, 7 }, result.Bytes);
+        }
+
+        [Fact]
+        public async Task RefineAsync_WithReference_SendsItAsItsOwnPart_NextToTheImage()
+        {
+            string? body = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/r""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.RefineAsync("s1", "k", "medium", new byte[] { 1 }, "image/png", "ajeite a posição do Zeus",
+                new byte[] { 2 }, CancellationToken.None);
+
+            Assert.Contains("name=image", body);
+            Assert.Contains("name=reference", body);
+            Assert.Contains("filename=referencia.png", body);
         }
 
         [Fact]
@@ -298,7 +326,7 @@ namespace MantosExtract.Core.Tests.Extract
             var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
 
             await client.RefineAsync("s1", "k", "medium", new byte[] { 1 }, "image/png", "pinte de azul",
-                CancellationToken.None, legacyModel: true);
+                null, CancellationToken.None, legacyModel: true);
 
             Assert.Equal("1", legacy);
         }
@@ -316,7 +344,7 @@ namespace MantosExtract.Core.Tests.Extract
 
             var ex = await Assert.ThrowsAsync<MantosExtractApiException>(() =>
                 client.RefineAsync("s1", "k", "medium", new byte[] { 1 }, "image/png", "faz algo",
-                    CancellationToken.None));
+                    null, CancellationToken.None));
 
             Assert.Equal("E_OPENAI_MODERATION", ex.Code);
             Assert.Equal("A OpenAI recusou.", ex.Message);

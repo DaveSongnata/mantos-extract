@@ -79,11 +79,15 @@ namespace MantosExtract.Core.Extract
         }
 
         public async Task<ExtractedImage> RefineAsync(string sessionId, string openAiApiKey, string quality,
-            byte[] imageBytes, string mimeType, string instruction, CancellationToken ct,
+            byte[] imageBytes, string mimeType, string instruction, byte[]? referenceBytes, CancellationToken ct,
             bool legacyModel = false)
         {
             using var form = new MultipartFormDataContent();
             form.Add(ImagePart(imageBytes, mimeType), "image", "selecao.png");
+            // Campo próprio, nunca um segundo "image": o servidor precisa saber qual das duas é
+            // a editada e qual é só consulta.
+            if (referenceBytes != null)
+                form.Add(ImagePart(referenceBytes, "image/png"), "reference", "referencia.png");
             form.Add(new StringContent(instruction ?? ""), "instruction");
 
             string url = await PostForUrlAsync("/api/v1/mantos-extract/refine", form, sessionId, openAiApiKey,

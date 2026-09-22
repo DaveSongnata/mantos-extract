@@ -173,6 +173,18 @@
   .refine-modal textarea:focus-visible{outline:2px solid var(--accent-dark);outline-offset:0;}
   .refine-modal textarea:disabled{opacity:.5;}
   .refine-modal .home-upscale-running,.refine-modal .inline-ok,.refine-modal .inline-error{margin:0 12px;}
+  /* Vagas "imagem a alterar" e "referência" (Dave, 2026-09-22): miniatura quadrada de borda dura,
+     texto de orientação quando vazia e o botão "Usar seleção". Sem cor nova: a vaga vazia se
+     distingue pelo traço tracejado, não por matiz. */
+  .refine-slot{margin:0 12px;display:flex;flex-direction:column;gap:4px;}
+  .refine-slot-row{display:grid;grid-template-columns:56px 1fr;gap:8px;align-items:center;}
+  .refine-slot-side{display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .refine-slot-thumb{width:56px;height:56px;border:var(--lw) solid var(--ink);background:var(--surface);
+    display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .refine-slot-thumb.empty{border-style:dashed;}
+  .refine-slot-thumb img{max-width:100%;max-height:100%;display:block;}
+  .refine-slot-text{font-size:11px;line-height:1.35;min-width:0;}
+  .refine-slot-actions{display:flex;gap:4px;}
   /* Linha de ações por IA na tela inicial (Dave, 2026-09-20): botões só com ILUSTRAÇÃO (o nome fica
      no tooltip e no texto pra leitor de tela). Traço duro, raio zero, sem cor nova — um ícone por
      ação, nunca sparkle/estrela (clichê de "IA"). */
@@ -613,6 +625,34 @@
       <div class="modal refine-modal" role="dialog" aria-labelledby="refineModalTitle">
         <div class="bar"><span class="tab" aria-hidden="true"></span><span id="refineModalTitle" data-i18n="me.refine.title">Refinar com IA</span></div>
         <p class="help-text" data-i18n="me.refine.help"></p>
+        <!-- Duas vagas (Dave, 2026-09-22): a imagem a alterar e uma referência opcional (ex.: a
+             foto original de onde a peça saiu), cada uma preenchida com a seleção do Corel. -->
+        <div class="refine-slot">
+          <div class="caps" data-i18n="me.refine.slot.target">Imagem a alterar</div>
+          <div class="refine-slot-row">
+            <div class="refine-slot-thumb empty" id="refineTargetThumb"><img id="refineTargetImg" alt="" hidden></div>
+            <div class="refine-slot-side">
+              <div class="refine-slot-text muted" id="refineTargetText" data-i18n="me.refine.slot.empty"></div>
+              <div class="refine-slot-actions">
+                <button type="button" id="refineTargetUse" class="btn-sm" data-i18n="me.refine.slot.use">Usar seleção</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="refine-slot">
+          <div class="caps" data-i18n="me.refine.slot.reference">Referência (opcional)</div>
+          <div class="refine-slot-row">
+            <div class="refine-slot-thumb empty" id="refineReferenceThumb"><img id="refineReferenceImg" alt="" hidden></div>
+            <div class="refine-slot-side">
+              <div class="refine-slot-text muted" id="refineReferenceText" data-i18n="me.refine.slot.referenceHint"></div>
+              <div class="refine-slot-actions">
+                <button type="button" id="refineReferenceUse" class="btn-sm" data-i18n="me.refine.slot.use">Usar seleção</button>
+                <button type="button" id="refineReferenceClear" class="btn-sm" hidden data-i18n-title="me.refine.slot.remove" title="Remover referência">×</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="refineSlotError" class="inline-error" hidden></div>
         <textarea id="refineInstruction" maxlength="500" rows="3" data-i18n-placeholder="me.refine.placeholder"></textarea>
         <button type="button" id="refineBtn" class="primary" disabled data-i18n="me.refine.button">Refinar</button>
         <div id="refineRunning" class="home-upscale-running" hidden>
@@ -960,6 +1000,7 @@
     canUpscaleSelection: false, // IA de upscale instalada (vem no status) — botão da home
     selectionUpscale: "idle", // "idle"|"running" — upscale avulso da imagem selecionada
     refine: "idle",           // "idle"|"running" — refino por prompt livre da imagem selecionada
+    refineSlots: {target: null, reference: null}, // {url} de cada vaga preenchida (o C# guarda os bytes)
     hasRecraftKey: false,     // chave da Recraft (BYOK) guardada neste computador
     recraft: "idle",          // "idle"|"running" — remover fundo / vetorizar da imagem selecionada
     recraftOp: "",            // "removeBackground"|"vectorize" — qual está rodando/rodou por último
@@ -1083,6 +1124,9 @@
       case "refine":
         onRefine(msg);
         break;
+      case "refineSlots":
+        onRefineSlots(msg);
+        break;
       case "recraft":
         onRecraft(msg);
         break;
@@ -1102,6 +1146,8 @@
     // select, extracting, result) ignore the heartbeat so a stray click elsewhere in Corel
     // never yanks the operator out of what they were doing.
     if (!$("screen-home").hidden && wasBitmap !== state.selIsBitmap) updateHomeEmptyState();
+    // "Usar seleção" do modal de refino acompanha a seleção do Corel enquanto ele está aberto.
+    if (!$("refineModal").hidden && wasBitmap !== state.selIsBitmap) renderRefine();
   }
 
   // ---- detect flow (Fase 2) ------------------------------------------------
@@ -1473,23 +1519,56 @@
   });
   $("homeUpscaleCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
   // ---- refino por prompt livre (Dave, 2026-09-18) --------------------------------------------
-  // Qualquer bitmap selecionado no Corel + uma instrução; o resultado entra AO LADO do original.
-  // Botão na tela inicial (e atalho na tela de resultado) que abre o modal com o campo.
+  // Qualquer bitmap do Corel + uma instrução; o resultado entra AO LADO do original. Botão na tela
+  // inicial (e atalho na tela de resultado) que abre o modal com o campo. Desde 2026-09-22 o modal
+  // tem duas vagas — imagem a alterar e referência opcional —, cada uma com "Usar seleção".
   function renderRefine(){
     var running = state.refine === "running";
     var typed = $("refineInstruction").value.trim().length;
-    // O botão da home só trava por falta de seleção ou por OUTRA operação em andamento; o refino
-    // rodando não o trava (reabre o modal pra ver o progresso).
-    $("refineOpenBtn").disabled = !state.selIsBitmap || (upscaleBusy() && !running);
+    // O botão da home só trava por OUTRA operação em andamento (sem seleção ele abre e a vaga fica
+    // esperando o "Usar seleção"); o refino rodando não o trava (reabre o modal pra ver o progresso).
+    $("refineOpenBtn").disabled = upscaleBusy() && !running;
     $("refineBtn").hidden = running;
-    $("refineBtn").disabled = !state.selIsBitmap || upscaleBusy() || typed < 3;
+    $("refineBtn").disabled = !state.refineSlots.target || upscaleBusy() || typed < 3;
     $("refineRunning").hidden = !running;
     $("refineInstruction").disabled = running;
     // Fechar enquanto roda deixaria o operador sem ver o progresso nem o cancelar.
     $("refineClose").disabled = running;
+    renderRefineSlot("Target", state.refineSlots.target, "me.refine.slot.empty", running);
+    renderRefineSlot("Reference", state.refineSlots.reference, "me.refine.slot.referenceHint", running);
+    $("refineReferenceClear").hidden = !state.refineSlots.reference;
+    $("refineReferenceClear").disabled = running;
+  }
+
+  // Vaga vazia: borda tracejada + texto de orientação. Preenchida: a miniatura do que vai ser enviado.
+  function renderRefineSlot(name, slot, emptyKey, running){
+    var img = $("refine" + name + "Img"), text = $("refine" + name + "Text");
+    $("refine" + name + "Thumb").classList.toggle("empty", !slot);
+    img.hidden = !(slot && slot.url);
+    if (slot && slot.url) { if (img.getAttribute("src") !== slot.url) img.src = slot.url; }
+    else img.removeAttribute("src");
+    text.hidden = !!slot;
+    text.textContent = T(emptyKey);
+    $("refine" + name + "Use").disabled = running || !state.selIsBitmap;
+  }
+
+  function onRefineSlots(msg){
+    state.refineSlots = {target: msg.target || null, reference: msg.reference || null};
+    var err = $("refineSlotError");
+    err.textContent = msg.error || "";
+    err.hidden = !msg.error;
+    renderRefine();
   }
 
   function openRefineModal(){
+    // O C# zera as vagas e já preenche a imagem a alterar com a seleção atual (se houver): nunca
+    // herdar a referência de um refino anterior de outra peça.
+    // Com o refino rodando, só reabre pra mostrar o progresso: as vagas em uso ficam como estão.
+    if (state.refine !== "running") {
+      state.refineSlots = {target: null, reference: null};
+      $("refineSlotError").hidden = true;
+      send({cmd:"refineOpen"});
+    }
     $("refineModal").hidden = false;
     renderRefine();
     $("refineInstruction").focus();
@@ -1606,11 +1685,14 @@
 
   $("refineInstruction").addEventListener("input", renderRefine);
   $("refineBtn").addEventListener("click", function(){
-    if (upscaleBusy() || !state.selIsBitmap) return;
+    if (upscaleBusy() || !state.refineSlots.target) return;
     if (!state.hasOpenAiKey) { closeRefineModal(); openSettings({nudgeKey: true}); return; }
     startRefine();
   });
   $("refineCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
+  $("refineTargetUse").addEventListener("click", function(){ send({cmd:"refineCapture", slot:"target"}); });
+  $("refineReferenceUse").addEventListener("click", function(){ send({cmd:"refineCapture", slot:"reference"}); });
+  $("refineReferenceClear").addEventListener("click", function(){ send({cmd:"refineClear", slot:"reference"}); });
   $("refineOpenBtn").addEventListener("click", openRefineModal);
   $("refineClose").addEventListener("click", closeRefineModal);
   $("resultRefineBtn").addEventListener("click", function(){
