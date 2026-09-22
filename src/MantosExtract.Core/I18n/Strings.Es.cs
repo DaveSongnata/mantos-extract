@@ -99,7 +99,7 @@ namespace MantosExtract.Core.I18n
             ["me.extract.title"] = "Extrayendo elementos",
             ["me.extract.result.title"] = "Elementos extraídos",
             ["me.extract.result.summary"] = "{0} de {1} elementos extraídos con éxito",
-            ["me.extract.result.newImage"] = "Extraer otra imagen",
+            ["me.extract.result.newImage"] = "Volver al inicio",
 
             // Upscale opcional en la pantalla de resultado (Dave, 2026-09-11)
             ["me.result.upscale.button"] = "Upscale",
