@@ -113,22 +113,45 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   manda as duas pra OpenAI como `image[]` (a editada PRIMEIRO), reduz a referência a 2048 px e o
   prompt diz qual imagem é a saída. Referência igual à imagem a alterar é recusada.
 
-## Remover fundo e vetorizar — Recraft BYOK (Dave, 2026-09-20)
+## Remover fundo e vetorizar — Recraft, chave única + cota (Dave, 2026-09-22)
 
 - **Duas capacidades independentes** (`POST /mantos-extract/remove-background` e `/vectorize`), botões
   só com ILUSTRAÇÃO na tela inicial. Nunca encadear `removeBackground` sobre SVG (o teste de
   2026-09-19 mostrou que piora); quem quer vetor sem fundo remove o fundo e vetoriza a peça nova.
-- **Chave da Recraft é BYOK**, espelho da OpenAI: Configurações → DPAPI (`recraft.bin`) →
-  `X-Recraft-Api-Key`. Sem chave, os botões aparecem desabilitados com aviso nas 3 línguas. Ao
-  contrário da chave OpenAI, `SaveRecraftKey` lança se a gravação falhar (a OpenAI engole a falha).
-- **A Recraft só é chamada pelo mantosfc**, nunca direto do addin. Sem débito de crédito (M2/M3): o
-  custo (US$ 0,01 por chamada no teste) é da chave do tenant. Client único no servidor (60 s por
-  tentativa, no máximo 1 retry só em rede/5xx); limites de entrada (256..4096 px, 16 MP, 10 MB)
-  ajustados no servidor.
+- **A chave da Recraft é ÚNICA, da plataforma** (`RECRAFT_API_KEY` no `.env` do mantosfc). O BYOK por
+  header valeu só de 2026-09-20 a 2026-09-22. O addin não guarda, não envia e não vê a chave: sumiram
+  o campo nas Configurações, o `recraft.bin` (DPAPI — apagado na atualização por
+  `SecureCredentialStore.PurgeLegacyRecraftKey`), o header `X-Recraft-Api-Key` e o gate
+  `hasRecraftKey`. `recraftApiKey()` **não aceita argumento**, de propósito: é a assinatura que
+  impede alguém de, um dia, ligar o header do request nela e deixar um tenant gastar a conta de outro.
+- **O teto de custo virou a cota por plano** — as duas coisas são a MESMA decisão, nunca mexer numa
+  sem a outra. Com BYOK, quem limitava o gasto era o tenant pagar a própria conta; agora quem paga é o
+  Davidson, e o que segura é `plans.limits_mantos_extract_recraft` (`0` = sem acesso | `-1` =
+  ilimitado | `N` = teto), checado por `assertRecraftQuota` ANTES de qualquer byte sair pra Recraft.
+- **Regras da cota:** UMA cota para as duas operações (custam o mesmo); contada por **EMPRESA** — como
+  não existe tabela de empresa, é o tenant raiz (`parentUserId ?? id`) mais os sub-tenants dele;
+  **mensal alinhada à assinatura**, não ao dia 1º (`recraft_cycle.ts`, âncora =
+  `subscriptionExpiresAt ?? creditsResetAt ?? createdAt`, sempre somando meses sobre a âncora ORIGINAL
+  pra não driftar em mês curto). Só `status='success'` conta. O limite sai do usuário que chama
+  (plano + `permissionOverrides`), o USO da empresa inteira.
+- **Continua NÃO sendo crédito** (M2 segue revogada): nada é debitado de `creditsRemaining`, nenhuma
+  `CreditTransaction`. O consumo é DERIVADO de `generations`, que já logava tudo — era exatamente o
+  que o comentário de `routes.ts` guardava ("for a possible future per-plan limit"). Sem contador
+  materializado e sem job de virada: derivar da âncora não tem estado pra dessincronizar.
+- **A migration nasce com `0` em todo plano** (escolha explícita do Dave sobre "NULL = ilimitado"):
+  no deploy ninguém passa até configurar os tetos em `/admin/plans`. O custo de esquecer é um botão
+  que não funciona, não uma fatura surpresa.
 - **Erros:** 401/403 da Recraft viram 422 `E_RECRAFT_INVALID_KEY` (NUNCA 401: o addin trata 401 como
-  sessão expirada e leva à tela de login). O addin traduz o CÓDIGO em chave i18n
-  (`RecraftErrorMessages`), não mostra o texto fixo em pt-BR do servidor. SUPOSIÇÃO a validar: a
-  doc da Recraft não documenta o corpo de erro nem o status de "sem créditos".
+  sessão expirada e leva à tela de login); chave ausente no servidor é 503 `E_MISSING_RECRAFT_KEY`;
+  cota é 403 `E_RECRAFT_NOT_IN_PLAN` (limite 0, o estado normal logo após o deploy) ou
+  `E_RECRAFT_QUOTA_EXCEEDED`. O addin traduz o CÓDIGO em chave i18n (`RecraftErrorMessages`), não
+  mostra o texto do servidor. Como as mensagens de `invalidKey`/`noCredit` deixaram de ser problema do
+  operador, elas agora apontam pro suporte; `recraft_client.ts` loga esses dois em nível ERROR, porque
+  são incidente da plataforma (todos param ao mesmo tempo). **LIMITAÇÃO conhecida:** tradução por
+  código não carrega número nem data, então o operador lê "a cota da sua empresa acabou" sem o
+  "renova em DD/MM" que o servidor calculou — os números ficam no admin. Resolver exigiria campos
+  estruturados no erro (`ExtractionClient.BuildError`), não feito. SUPOSIÇÃO a validar: a doc da
+  Recraft não documenta o corpo de erro nem o status de "sem créditos".
 - **No Corel:** o resultado entra AO LADO do original, mesmo tamanho físico (`RefinePlacement` +
   `RecraftPlacement.FitInside`, escala uniforme pro SVG). Import de SVG usa `cdrSVG = 1345` e agrupa
   se o Corel devolver vários objetos — **comportamento ainda não confirmado no Corel real**.
@@ -337,9 +360,10 @@ Dois pontos de atenção:
 |----|-------|
 | M1 | Detecção NÃO é corte final — é sugestão visual; usuário confirma cada elemento antes de extrair (spec §2) |
 | M2 | ~~Detecção debita 1 crédito (Dave, 2026-09-03)~~ → **Revogada 2026-09-07: Mantos Extract não debita crédito (nem detecção, nem extração)** — BYOK + plano já pago tornava a cobrança dupla sem sentido; uso continua logado em `generations` pra eventual limite por plano futuro |
-| M3 | Chave OpenAI é BYOK por tenant, igual Gemini hoje (Dave, 2026-09-03) — nunca chave única da plataforma. **Desde 2026-09-20 a chave da Recraft também é BYOK**, no mesmo molde (header `X-Recraft-Api-Key`, DPAPI no cliente, 422 `E_MISSING_RECRAFT_KEY` sem fallback de servidor) |
+| M3 | Chave OpenAI é BYOK por tenant, igual Gemini hoje (Dave, 2026-09-03) — nunca chave única da plataforma. ~~Desde 2026-09-20 a chave da Recraft também é BYOK~~ → **Revogada só quanto à Recraft em 2026-09-22: a chave da Recraft é ÚNICA da plataforma** (`RECRAFT_API_KEY` no `.env` do mantosfc, sem header, sem DPAPI). O BYOK da OpenAI continua intacto. O que substitui o BYOK como teto de custo é a cota por plano (M9) — as duas andam sempre juntas |
 | M4 | Sessão de operador (Bearer/mantosfc) e chave OpenAI (BYOK) são independentes de `LicenseClient.cs`/HWID+Ed25519 do SisCut — nunca reusar aquele fluxo pra login |
 | M5 | Upscale é processo externo (Real-ESRGAN NCNN-Vulkan via IPC por arquivo, padrão `EngineRunner.cs`), nunca lib embutida no shim nem dependência de Python |
 | M6 | ~~Só bitmap/PNG com transparência — sem SVG~~ → **Revogada em 2026-09-20 quanto ao SVG**: a vetorização (Recraft `vectorize`) devolve SVG, que passa a ser saída válida e entra no Corel ao lado do bitmap. Continua valendo: sem DXF e sem fitting de molde (isso é SISBOLT) |
 | M7 | Sem abstração de troca de provider de IA — é OpenAI direto nos endpoints novos. **A Recraft não é troca de provider, é capacidade nova**: client dedicado (`recraft_client.ts`), sem interface genérica de provider |
+| M9 | Remover fundo/vetorizar têm cota por plano (`plans.limits_mantos_extract_recraft`, `0`/`-1`/`N`), contada por EMPRESA (tenant raiz + sub-tenants) e por ciclo mensal ALINHADO À ASSINATURA (Dave, 2026-09-22). Não é crédito (M2 segue revogada): é derivada de `generations`, nada é debitado. Existe porque a chave da Recraft virou única (M3) — remover a cota sem restaurar o BYOK deixa a conta do Davidson sem teto |
 | M8 | Fator de upscale é sempre 2× fixo sobre o resultado da extração — nenhuma tabela de mm/px por tipo de peça |

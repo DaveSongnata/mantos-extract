@@ -15,11 +15,15 @@ namespace MantosExtract.Windows
     /// Two files under <c>%LOCALAPPDATA%\MantosExtract</c>, each individually
     /// <c>ProtectedData.Protect</c>'d with <see cref="DataProtectionScope.CurrentUser"/> (no
     /// extra entropy): the mantosfc session (Bearer UUID + expiry + role + email — never the
-    /// password), the tenant's own OpenAI key (BYOK, Dave 2026-09-03) and the tenant's own
-    /// Recraft key (BYOK, Dave 2026-09-20, <c>recraft.bin</c>). CurrentUser scope
+    /// password) and the tenant's own OpenAI key (BYOK, Dave 2026-09-03). CurrentUser scope
     /// already gives the guarantee we need — bound to this Windows user on this machine, unable
     /// to silently roam to another machine — so a second secret is complexity without a threat
     /// it defends against.
+    /// </para>
+    /// <para>
+    /// Houve um terceiro arquivo, <c>recraft.bin</c> (BYOK da Recraft, 2026-09-20 a 2026-09-22).
+    /// A chave da Recraft passou a ser única, no servidor; o arquivo herdado é apagado na
+    /// construção desta classe em vez de ficar esquecido no perfil do operador.
     /// </para>
     /// <para>
     /// Every operation is non-throwing on I/O/crypto failure (a locked-down profile loses the
@@ -34,7 +38,23 @@ namespace MantosExtract.Windows
 
         private static string SessionPath => Path.Combine(Dir, "session.bin");
         private static string OpenAiKeyPath => Path.Combine(Dir, "openai.bin");
-        private static string RecraftKeyPath => Path.Combine(Dir, "recraft.bin");
+        /// <summary>Cofre da chave BYOK da Recraft, que valeu de 2026-09-20 a 2026-09-22. Só existe
+        /// aqui pra ser APAGADO — ver <see cref="PurgeLegacyRecraftKey"/>.</summary>
+        private static string LegacyRecraftKeyPath => Path.Combine(Dir, "recraft.bin");
+
+        public SecureCredentialStore()
+        {
+            PurgeLegacyRecraftKey();
+        }
+
+        /// <summary>
+        /// Apaga a chave BYOK da Recraft que ficou no disco de quem atualizou de uma versão
+        /// anterior à 0.9.12. A chave virou única da plataforma e o addin não a usa mais — deixar
+        /// uma credencial viva do operador num arquivo que nada mais lê é dívida de segurança, não
+        /// compatibilidade. Silencioso e não-lançante como todo o resto desta classe: falhar em
+        /// limpar não pode impedir o docker de abrir.
+        /// </summary>
+        private static void PurgeLegacyRecraftKey() => DeleteQuietly(LegacyRecraftKeyPath);
 
         public SessionState? LoadSession()
         {
@@ -62,26 +82,6 @@ namespace MantosExtract.Windows
         }
 
         public void ClearOpenAiKey() => DeleteQuietly(OpenAiKeyPath);
-
-        public string? LoadRecraftKey() => ReadProtected(RecraftKeyPath);
-
-        /// <summary>Chave da Recraft (BYOK, Dave 2026-09-20). Ao contrário da OpenAI, NÃO engole a
-        /// falha: grava, relê e compara; se não bateu, lança — o Bridge só responde "salva" quando a
-        /// chave realmente ficou guardada.</summary>
-        public void SaveRecraftKey(string apiKey)
-        {
-            if (string.IsNullOrWhiteSpace(apiKey)) throw new ArgumentException("Chave vazia.", nameof(apiKey));
-            string trimmed = apiKey.Trim();
-
-            Directory.CreateDirectory(Dir);
-            byte[] cipher = ProtectedData.Protect(Encoding.UTF8.GetBytes(trimmed), null, DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(RecraftKeyPath, cipher);
-
-            if (ReadProtected(RecraftKeyPath) != trimmed)
-                throw new IOException("A chave da Recraft não ficou gravada.");
-        }
-
-        public void ClearRecraftKey() => DeleteQuietly(RecraftKeyPath);
 
         private static string? ReadProtected(string path)
         {

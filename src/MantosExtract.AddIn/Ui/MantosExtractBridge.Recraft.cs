@@ -16,9 +16,10 @@ namespace MantosExtract.AddIn.Ui
     /// intacto e recuperável. Um arquivo à parte (partial) só pra não engordar o Bridge principal.
     ///
     /// Shell burro: lê a seleção, manda pro mantosfc (a Recraft nunca é chamada daqui) e coloca o
-    /// resultado. A chave da Recraft é BYOK, guardada no mesmo cofre DPAPI da OpenAI. As duas
-    /// operações são independentes; quem quer um vetor sem fundo remove o fundo e depois vetoriza a
-    /// peça nova. Nenhuma mensagem de erro é fixa em português: o código vira chave i18n
+    /// resultado. A chave da Recraft é ÚNICA e vive no servidor (Dave, 2026-09-22) — o addin não a
+    /// guarda nem a envia, e nem sabe se a empresa ainda tem cota: tenta, e traduz o que voltar. As
+    /// duas operações são independentes; quem quer um vetor sem fundo remove o fundo e depois
+    /// vetoriza a peça nova. Nenhuma mensagem de erro é fixa em português: o código vira chave i18n
     /// (<see cref="RecraftErrorMessages"/>), pra atender PT/ES/EN.
     /// </summary>
     public sealed partial class MantosExtractBridge
@@ -34,13 +35,10 @@ namespace MantosExtract.AddIn.Ui
             SessionState? session = _credentials.LoadSession();
             if (session == null) { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
 
-            string? recraftKey = _credentials.LoadRecraftKey();
-            if (string.IsNullOrWhiteSpace(recraftKey))
-            {
-                PostRecraftDone(operation, false, "E_MISSING_RECRAFT_KEY", L("me.recraft.error.noKey"));
-                return;
-            }
-
+            // Não há mais gate local de credencial: a chave da Recraft é do servidor desde
+            // 2026-09-22, e quem pode chamar (plano, cota da empresa) também é ele que decide. O
+            // addin tenta e mostra o que voltar — E_RECRAFT_NOT_IN_PLAN, E_RECRAFT_QUOTA_EXCEEDED
+            // ou E_MISSING_RECRAFT_KEY, todos já traduzidos por código em RecraftErrorMessages.
             Post(new { type = "recraft", op = OperationTag(operation), stage = "running" });
 
             byte[] sourceBytes;
@@ -58,7 +56,7 @@ namespace MantosExtract.AddIn.Ui
             try
             {
                 result = await _recraftClient
-                    .RunAsync(operation, session.SessionId, recraftKey!, sourceBytes, "image/png", ct)
+                    .RunAsync(operation, session.SessionId, sourceBytes, "image/png", ct)
                     .ConfigureAwait(false);
             }
             catch (MantosExtractApiException ex)
@@ -140,29 +138,5 @@ namespace MantosExtract.AddIn.Ui
             Post(new { type = "recraft", op = OperationTag(operation), stage = "done", ok, code, error });
         }
 
-        /// <summary>Chave da Recraft (BYOK, Dave 2026-09-20), na tela de Configurações. Ao contrário
-        /// da OpenAI, só responde "salva" se a chave realmente ficou guardada (o cofre lança se a
-        /// gravação falhar).</summary>
-        private void SaveRecraftKey(string key)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(key))
-                {
-                    _credentials.ClearRecraftKey();
-                    Post(new { type = "recraftKey", ok = true, saved = false });
-                    return;
-                }
-
-                _credentials.SaveRecraftKey(key);
-                Post(new { type = "recraftKey", ok = true, saved = true });
-            }
-            catch (Exception ex)
-            {
-                // Nunca o valor da chave no log — só o motivo.
-                MantosExtractLog.Write("SaveRecraftKey FAILED: " + ex.Message);
-                Post(new { type = "recraftKey", ok = false, error = L("me.settings.recraft.saveFailed") });
-            }
-        }
     }
 }

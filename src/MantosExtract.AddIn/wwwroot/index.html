@@ -198,8 +198,6 @@
   .icon-btn:focus-visible{outline:2px solid var(--accent-dark);outline-offset:2px;}
   .icon-btn:disabled{opacity:.35;cursor:not-allowed;}
   .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
-  .recraft-hint{font-size:11px;line-height:1.4;border-left:var(--lw) solid var(--ink);padding:6px 8px;background:var(--surface);}
-  .recraft-hint .linklike{margin-left:4px;}
   .home-upscale-running{display:flex;align-items:center;justify-content:center;gap:8px;
     font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.02em;
     border:var(--lw) solid var(--ink);padding:10px;}
@@ -607,11 +605,9 @@
           <span class="sr-only" data-i18n="me.recraft.vectorize.title">Vetorizar (SVG)</span>
         </button>
       </div>
-      <!-- Sem chave da Recraft as duas ações aparecem desabilitadas, com orientação clara. -->
-      <div id="recraftHint" class="recraft-hint" hidden>
-        <span data-i18n="me.recraft.hint.noKey">Cadastre a chave da Recraft nas Configurações para remover fundo e vetorizar.</span>
-        <button type="button" id="recraftHintSettings" class="linklike" data-i18n="me.recraft.hint.openSettings">Abrir Configurações</button>
-      </div>
+      <!-- O aviso "cadastre a chave da Recraft" morava aqui. Saiu em 2026-09-22: a chave é do
+           servidor, e quem não tem direito (plano sem a cota, cota do mês esgotada) só descobre
+           ao clicar — o addin não tem como saber antes. -->
       <div id="recraftRunning" class="home-upscale-running" hidden>
         <span id="recraftRunningText"></span>
         <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
@@ -797,18 +793,6 @@
       </div>
       <button type="button" id="saveOpenAiKey" class="secondary" data-i18n="me.settings.openai.save">Salvar chave</button>
       <div id="openaiSaved" class="saved-note" hidden data-i18n="me.settings.openai.saved">Chave salva.</div>
-
-      <div class="divider"></div>
-
-      <!-- Chave da Recraft (BYOK, Dave 2026-09-20) — mesmo componente da chave da OpenAI. -->
-      <label for="recraftKey" data-i18n="me.settings.recraft.label">Chave da Recraft</label>
-      <p class="help-text" data-i18n="me.settings.recraft.help">Usada para remover fundo e vetorizar. Sua confecção usa a própria chave da Recraft. Cole aqui uma vez só.</p>
-      <div class="field">
-        <input id="recraftKey" type="password" autocomplete="off">
-      </div>
-      <button type="button" id="saveRecraftKey" class="secondary" data-i18n="me.settings.recraft.save">Salvar chave</button>
-      <div id="recraftSaved" class="saved-note" hidden data-i18n="me.settings.recraft.saved">Chave salva.</div>
-      <div id="recraftSaveError" class="inline-error" hidden></div>
 
       <div class="divider"></div>
 
@@ -1001,7 +985,6 @@
     selectionUpscale: "idle", // "idle"|"running" — upscale avulso da imagem selecionada
     refine: "idle",           // "idle"|"running" — refino por prompt livre da imagem selecionada
     refineSlots: {target: null, reference: null}, // {url} de cada vaga preenchida (o C# guarda os bytes)
-    hasRecraftKey: false,     // chave da Recraft (BYOK) guardada neste computador
     recraft: "idle",          // "idle"|"running" — remover fundo / vetorizar da imagem selecionada
     recraftOp: "",            // "removeBackground"|"vectorize" — qual está rodando/rodou por último
     selectionDevice: "gpu",   // "cpu" depois que a GPU faltou nesse fluxo
@@ -1024,7 +1007,6 @@
   function renderHome(msg){
     state.extractionQuality = QUALITY_LEVELS.indexOf(msg.extractionQuality) >= 0 ? msg.extractionQuality : "medium";
     state.hasOpenAiKey = !!msg.hasOpenAiKey;
-    state.hasRecraftKey = !!msg.hasRecraftKey;
     $("homeEmail").textContent = msg.email || "";
     $("settingsBtn").hidden = false;
     $("historyBtn").hidden = false;
@@ -1076,9 +1058,6 @@
           if (state.hasOpenAiKey) hide("noKeyNudge");
           show("openaiSaved"); setTimeout(function(){ hide("openaiSaved"); }, 2500);
         }
-        break;
-      case "recraftKey":
-        onRecraftKey(msg);
         break;
       case "extractionQuality":
         if (msg.ok) {
@@ -1613,21 +1592,21 @@
   }
 
   // ---- remover fundo e vetorizar via Recraft (Dave, 2026-09-20) --------------------------------
-  // Mesmo fluxo do refino: QUALQUER bitmap selecionado, resultado AO LADO do original. Sem chave da
-  // Recraft (BYOK) os dois botões ficam desabilitados e o aviso abaixo orienta a cadastrá-la.
+  // Mesmo fluxo do refino: QUALQUER bitmap selecionado, resultado AO LADO do original. Desde
+  // 2026-09-22 a única condição que o addin consegue checar é ter um bitmap selecionado — plano e
+  // cota são do servidor, e aparecem como erro na resposta, não como botão desabilitado.
   function renderRecraft(){
     var running = state.recraft === "running";
-    var usable = state.selIsBitmap && state.hasRecraftKey && !upscaleBusy();
+    var usable = state.selIsBitmap && !upscaleBusy();
     $("removeBgBtn").disabled = !usable;
     $("vectorizeBtn").disabled = !usable;
-    $("recraftHint").hidden = state.hasRecraftKey;
     $("recraftRunning").hidden = !running;
     $("recraftRunningText").textContent =
       T(state.recraftOp === "vectorize" ? "me.recraft.running.vectorize" : "me.recraft.running.removeBg");
   }
 
   function startRecraft(op){
-    if (upscaleBusy() || !state.selIsBitmap || !state.hasRecraftKey) return;
+    if (upscaleBusy() || !state.selIsBitmap) return;
     state.recraft = "running";
     state.recraftOp = op;
     $("recraftResult").hidden = true;
@@ -1660,28 +1639,9 @@
     rerenderResultRows();
   }
 
-  function onRecraftKey(msg){
-    if (!msg.ok) {
-      $("recraftSaveError").textContent = msg.error || T("me.settings.recraft.saveFailed");
-      show("recraftSaveError");
-      hide("recraftSaved");
-      return;
-    }
-    hide("recraftSaveError");
-    state.hasRecraftKey = !!msg.saved;
-    $("recraftKey").value = "";
-    if (msg.saved) { show("recraftSaved"); setTimeout(function(){ hide("recraftSaved"); }, 2500); }
-    else hide("recraftSaved");
-    renderHomeUpscale();
-  }
-
   $("removeBgBtn").addEventListener("click", function(){ startRecraft("removeBackground"); });
   $("vectorizeBtn").addEventListener("click", function(){ startRecraft("vectorize"); });
   $("recraftCancel").addEventListener("click", function(){ send({cmd:"cancel"}); });
-  $("recraftHintSettings").addEventListener("click", function(){ openSettings(); $("recraftKey").focus(); });
-  $("saveRecraftKey").addEventListener("click", function(){
-    send({cmd:"saveRecraftKey", key: $("recraftKey").value.trim()});
-  });
 
   $("refineInstruction").addEventListener("input", renderRefine);
   $("refineBtn").addEventListener("click", function(){
@@ -1878,9 +1838,6 @@
     $("qualitySlider").value = QUALITY_LEVELS.indexOf(state.extractionQuality);
     updateQualityTicks();
     $("openaiKey").value = "";
-    $("recraftKey").value = "";
-    hide("recraftSaved");
-    hide("recraftSaveError");
     $("currentPassword").value = "";
     $("newPassword").value = "";
     $("newPasswordConfirm").value = "";

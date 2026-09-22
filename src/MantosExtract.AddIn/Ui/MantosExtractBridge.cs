@@ -174,7 +174,6 @@ namespace MantosExtract.AddIn.Ui
                     case "logout": RunAsync(async ct => PostAuth(await _auth.LogoutAsync(ct))); break;
 
                     case "saveOpenAiKey": SaveOpenAiKey(openAiKey); break;
-                    case "saveRecraftKey": SaveRecraftKey(openAiKey); break; // mesmo campo JSON "key" da OpenAI
                     case "useLegacyModel": _useLegacyImageModel = true; MantosExtractLog.Write("Modelo anterior aceito pelo operador"); break;
                     case "saveExtractionQuality": SaveExtractionQuality(extractionQuality); break;
                     case "changePassword": RunAsync(ct => ChangePasswordAsync(currentPassword, newPassword, ct)); break;
@@ -280,7 +279,8 @@ namespace MantosExtract.AddIn.Ui
                 role = session.Role,
                 warning = result.WarningMessage,
                 hasOpenAiKey = _credentials.LoadOpenAiKey() != null,
-                hasRecraftKey = _credentials.LoadRecraftKey() != null,
+                // Não há mais `hasRecraftKey`: a chave da Recraft é do servidor desde 2026-09-22,
+                // então o addin não tem o que conferir antes de habilitar os botões.
                 extractionQuality = ExtractionQualityStore.Read(),
             });
         }

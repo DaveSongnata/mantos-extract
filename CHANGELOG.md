@@ -6,6 +6,72 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-09-22 — Recraft com chave única da plataforma + cota por plano/empresa
+
+Versão 0.9.12. Pedido do Dave: "o recraft que hoje é feito com BYOK seja feito com uma chave única
+(informada no .env do backend do mantosfc)... isso requer também que possamos controlar a quantidade
+de vetorizações por plano/usuário/empresa".
+
+**As duas metades são uma decisão só.** O BYOK da Recraft (que valeu 2 dias, de 2026-09-20 a hoje)
+não era burocracia: era o que impedia custo sem teto, porque cada confecção pagava a própria conta.
+Tirando o BYOK, quem paga vira o Davidson — e sem um limite no lugar, qualquer tenant poderia
+esvaziar a conta dele. Por isso a chave única e a cota entraram juntas, e o CLAUDE.md (M3/M9) diz
+explicitamente pra nunca mexer numa sem a outra.
+
+**Chave.** `RECRAFT_API_KEY` no `.env` do mantosfc. `recraftApiKey()` não aceita argumento nenhum, de
+propósito — a assinatura é o que impede que, um dia, alguém ligue o header do request nela e deixe um
+tenant gastar a conta da Recraft de outro. Ausente = 503 `E_MISSING_RECRAFT_KEY` (nunca 401: o addin
+trata 401 como sessão expirada e leva pro login), nunca um fallback mudo. No addin saíram o campo das
+Configurações, o header, o gate `hasRecraftKey` e o cofre `recraft.bin`, que é APAGADO na atualização
+(`PurgeLegacyRecraftKey`) — deixar uma credencial viva do operador num arquivo que nada mais lê é
+dívida de segurança, não compatibilidade.
+
+**Cota.** Nova coluna `plans.limits_mantos_extract_recraft` na convenção que o repo já usava
+(`0` = sem acesso | `-1` = ilimitado | `N` = teto), resolvida pelo `PermissionResolver` de sempre, o
+que dá override por pessoa de graça. Quatro escolhas de produto do Dave: uma cota só para as duas
+operações (custam o mesmo na Recraft); contada por EMPRESA; mensal alinhada à assinatura; e bloqueio
+com erro amigável ao estourar. Como não existe tabela de empresa no mantosfc (a multi-tenancy vive em
+`creator_users.role`/`parent_user_id`), "empresa" virou o tenant raiz mais os sub-tenants dele.
+
+Decisões técnicas que tomei sozinho, com o porquê:
+
+- **Nada de contador materializado.** O consumo é derivado de `generations` a cada checagem. Um
+  contador exigiria um job mensal por tenant e ficaria errado EM SILÊNCIO se o job falhasse; derivar
+  da âncora não tem estado pra dessincronizar. Era literalmente pra isso que o comentário em
+  `routes.ts` guardava o log ("for a possible future per-plan limit").
+- **Ciclo derivado de uma âncora, em módulo puro** (`recraft_cycle.ts`, sem imports do Adonis, como
+  `recraft_errors.ts`). Sempre soma meses sobre a âncora ORIGINAL, nunca sobre o resultado anterior:
+  uma âncora em 31/01 clampa pra 28/02 em fevereiro mas tem que voltar pra 31/03 em março, e somar
+  1 mês repetidamente prenderia o ciclo no dia 28 pra sempre. Tem teste só disso.
+- **Dois códigos de erro, não um.** `E_RECRAFT_NOT_IN_PLAN` (limite 0) é o estado NORMAL logo depois
+  do deploy, porque a migration nasce com 0 em todo plano. Dizer "sua cota do mês acabou" pra quem
+  nunca teve cota mandaria o operador esperar uma virada de ciclo que não resolveria nada.
+- **Default 0 na migration**, escolha explícita do Dave contra "NULL = ilimitado": ninguém passa até
+  os tetos serem configurados em `/admin/plans`. O custo de esquecer é um botão que não funciona, em
+  vez de uma fatura surpresa.
+- **Só `status='success'` conta.** Uma chamada que falhou não gastou nada na Recraft; cobrar por ela
+  puniria o operador por um erro nosso.
+- **Mensagens de `E_RECRAFT_INVALID_KEY`/`E_RECRAFT_NO_CREDIT` reescritas.** Elas mandavam "confira a
+  chave nas Configurações" — instrução impossível agora que o campo não existe e a chave é do
+  Davidson. Apontam pro suporte, e o client loga esses dois em nível ERROR por serem incidente da
+  plataforma (todos os tenants param ao mesmo tempo).
+
+Um defeito que um teste pegou durante a implementação, registrado porque a causa não é óbvia:
+`recraftApiKey(raw = env.get(...))` com valor default NÃO dava pra testar o caso "sem chave", porque
+passar `undefined` ATIVA o default e cai no env mesmo assim. Virou `requireRecraftKey(raw)` (pura,
+testável) + `recraftApiKey()` (sem parâmetro) — que por acidente feliz é também o desenho mais seguro.
+
+**Limitação conhecida:** o addin traduz erro por CÓDIGO (pra atender PT/ES/EN), então o operador lê
+"a cota da sua empresa acabou" sem o "renova em DD/MM" que o servidor calculou. Os números ficam no
+admin. Resolver exigiria campos estruturados no corpo do erro e mexer em `ExtractionClient.BuildError`.
+
+De brinde, dois bugs achados no admin e corrigidos: a aba "Últimas solicitações" de
+`/admin/mantos-extract` só consultava `detect` e `extract`, escondendo refino/fundo/vetorização que
+eram gravados normalmente; e o rótulo dessa lista era um ternário que chamava de "Extração" tudo que
+não fosse detecção.
+
+---
+
 ## 2026-09-22 — Refino com imagem de referência opcional
 
 Versão 0.9.11. Pedido do Dave: no refino, o operador quer apontar pra imagem ORIGINAL de onde a peça

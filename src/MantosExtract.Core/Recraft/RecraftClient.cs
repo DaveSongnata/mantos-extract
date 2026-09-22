@@ -12,8 +12,14 @@ namespace MantosExtract.Core.Recraft
 {
     /// <summary>
     /// Chama <c>POST /api/v1/mantos-extract/remove-background</c> e <c>/vectorize</c> (mantosfc) e
-    /// baixa o resultado. BYOK igual à OpenAI (Dave, 2026-09-20): a chave da Recraft vai no header
-    /// <c>X-Recraft-Api-Key</c>, junto da sessão Bearer; a Recraft em si só é chamada pelo servidor.
+    /// baixa o resultado. A Recraft em si só é chamada pelo servidor.
+    ///
+    /// Só a sessão Bearer vai daqui (Dave, 2026-09-22). A chave da Recraft deixou de ser BYOK e
+    /// virou chave única da plataforma, no <c>.env</c> do mantosfc — o addin não a guarda, não a
+    /// envia e não tem como influenciá-la. Quem pode chamar, e quantas vezes no mês, é o servidor
+    /// que decide (cota por plano, contada por empresa). É por isso que sumiram o header
+    /// <c>X-Recraft-Api-Key</c> e a tela que pedia a chave.
+    ///
     /// O contrato de resposta é o da extração (<c>{url, meta}</c>), então o download e o mapeamento
     /// de erros são os mesmos (<see cref="ExtractionClient"/>).
     /// </summary>
@@ -37,7 +43,7 @@ namespace MantosExtract.Core.Recraft
             _http.Timeout = TimeSpan.FromMinutes(3);
         }
 
-        public async Task<ExtractedImage> RunAsync(RecraftOperation operation, string sessionId, string recraftApiKey,
+        public async Task<ExtractedImage> RunAsync(RecraftOperation operation, string sessionId,
             byte[] imageBytes, string mimeType, CancellationToken ct)
         {
             using var form = new MultipartFormDataContent();
@@ -50,7 +56,6 @@ namespace MantosExtract.Core.Recraft
                 Content = form,
             };
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", sessionId);
-            request.Headers.Add("X-Recraft-Api-Key", recraftApiKey);
 
             string url = await PostForUrlAsync(request, ct).ConfigureAwait(false);
             return await DownloadAsync(url, ct).ConfigureAwait(false);

@@ -15,6 +15,10 @@ namespace MantosExtract.Core.Tests.Recraft
         [InlineData("E_RECRAFT_BAD_RESPONSE", "me.recraft.error.unavailable")]
         [InlineData("E_RECRAFT_TIMEOUT", "me.recraft.error.timeout")]
         [InlineData("E_RECRAFT_BAD_INPUT", "me.recraft.error.badInput")]
+        // Cota por plano (2026-09-22): dois códigos porque pedem ações diferentes de quem lê —
+        // "seu plano não inclui" contra "a cota deste período acabou".
+        [InlineData("E_RECRAFT_NOT_IN_PLAN", "me.recraft.error.notInPlan")]
+        [InlineData("E_RECRAFT_QUOTA_EXCEEDED", "me.recraft.error.quotaExceeded")]
         [InlineData("E_NETWORK", "me.recraft.error.network")]
         [InlineData("E_DOWNLOAD_FAILED", "me.recraft.error.download")]
         public void KeyFor_MapsEveryKnownCodeToAnI18nKey(string code, string expectedKey)

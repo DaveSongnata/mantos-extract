@@ -17,10 +17,5 @@ namespace MantosExtract.Core.Tests.Auth
         public string? LoadOpenAiKey() => OpenAiKey;
         public void SaveOpenAiKey(string apiKey) => OpenAiKey = apiKey;
         public void ClearOpenAiKey() => OpenAiKey = null;
-
-        public string? RecraftKey { get; private set; }
-        public string? LoadRecraftKey() => RecraftKey;
-        public void SaveRecraftKey(string apiKey) => RecraftKey = apiKey;
-        public void ClearRecraftKey() => RecraftKey = null;
     }
 }
