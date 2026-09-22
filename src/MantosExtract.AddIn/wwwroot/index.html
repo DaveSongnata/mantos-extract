@@ -117,8 +117,12 @@
 
   /* ---- loading --------------------------------------------------------------------- */
   .loading-screen{align-items:center;justify-content:center;text-align:center;gap:14px;flex:1;display:flex;flex-direction:column;padding:40px 16px;}
-  .kicker-track{width:120px;height:8px;border:var(--lw) solid var(--ink);background:var(--surface);overflow:hidden;}
-  .kicker-fill{height:100%;width:40%;background:var(--accent);animation:kick 1s cubic-bezier(.6,0,.4,1) infinite;}
+  /* ONE loading bar for the whole app (the screen-detecting one). display:block on both parts is
+     load-bearing: when the fill was a <span> it stayed inline, and inline boxes ignore
+     width/height/transform — the bar rendered empty and "frozen" everywhere but detecting.
+     Always build it through the markup below / makeKicker(), never by hand. */
+  .kicker-track{display:block;flex:none;width:120px;height:8px;border:var(--lw) solid var(--ink);background:var(--surface);overflow:hidden;}
+  .kicker-fill{display:block;height:100%;width:40%;background:var(--accent);animation:kick 1s cubic-bezier(.6,0,.4,1) infinite;will-change:transform;}
   @keyframes kick{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
   @media (prefers-reduced-motion: reduce){.kicker-fill{animation-duration:2.4s;}}
   /* Small inline variant of the kicker, for the currently-active row of the extraction
@@ -126,7 +130,9 @@
      never Parallel), so only ONE row is ever mid-flight; the animation there is the only
      honest "something is happening" signal while a single OpenAI call can take many seconds. */
   .stage-inline{display:inline-flex;align-items:center;gap:6px;}
-  .kicker-track.sm{width:36px;height:6px;display:inline-block;vertical-align:middle;}
+  /* Same bar, only narrower — used ONLY inside table cells, where 120px would overflow the
+     ~340px docker. Same height, same animation. */
+  .kicker-track.sm{width:48px;}
   .muted{color:var(--ink);opacity:.62;font-size:12px;}
   .caps{text-transform:uppercase;letter-spacing:.04em;font-weight:700;font-size:11px;}
 
@@ -567,7 +573,7 @@
         <button type="button" id="homeUpscaleBtn" class="secondary"></button>
         <div id="homeUpscaleRunning" class="home-upscale-running" hidden>
           <span id="homeUpscaleRunningText"></span>
-          <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
+          <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
           <button type="button" class="row-cancel" id="homeUpscaleCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
         </div>
         <div id="homeUpscaleResult" class="inline-error" hidden></div>
@@ -596,7 +602,7 @@
       </div>
       <div id="recraftRunning" class="home-upscale-running" hidden>
         <span id="recraftRunningText"></span>
-        <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
+        <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
         <button type="button" class="row-cancel" id="recraftCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
       </div>
       <div id="recraftResult" class="inline-error" hidden></div>
@@ -611,7 +617,7 @@
         <button type="button" id="refineBtn" class="primary" disabled data-i18n="me.refine.button">Refinar</button>
         <div id="refineRunning" class="home-upscale-running" hidden>
           <span data-i18n="me.refine.running">Refinando...</span>
-          <span class="kicker-track sm" aria-hidden="true"><span class="kicker-fill"></span></span>
+          <div class="kicker-track" aria-hidden="true"><div class="kicker-fill"></div></div>
           <button type="button" class="row-cancel" id="refineCancel" data-i18n-title="me.result.upscale.cancelTitle" title="Cancelar">×</button>
         </div>
         <div id="refineResult" class="inline-error" hidden></div>
@@ -1270,6 +1276,17 @@
   // kicker-track/kicker-fill sliding-block language already established on screen-loading/
   // screen-detecting, just sized down to fit a table cell — one consistent "something is
   // happening" idiom across the whole app instead of inventing a new one.
+  // The one loading bar (same markup as screen-detecting's). `small` only narrows it for table cells.
+  function makeKicker(small){
+    var track = document.createElement("div");
+    track.className = small ? "kicker-track sm" : "kicker-track";
+    track.setAttribute("aria-hidden", "true");
+    var fill = document.createElement("div");
+    fill.className = "kicker-fill";
+    track.appendChild(fill);
+    return track;
+  }
+
   function renderStageCell(stateCell, stage, ok, id, code){
     if (stage === "done") {
       // "Cancelado" (Dave, 2026-09-08) é um rótulo à parte de "FALHOU" — o operador cancelou de
@@ -1285,15 +1302,7 @@
     var label = document.createElement("span");
     label.textContent = T("me.extract.progress." + stage);
     wrap.appendChild(label);
-    if (stage !== "queued") {
-      var track = document.createElement("span");
-      track.className = "kicker-track sm";
-      track.setAttribute("aria-hidden", "true");
-      var fill = document.createElement("span");
-      fill.className = "kicker-fill";
-      track.appendChild(fill);
-      wrap.appendChild(track);
-    }
+    if (stage !== "queued") wrap.appendChild(makeKicker(true));
     if (id) {
       var cancelBtn = document.createElement("button");
       cancelBtn.type = "button";
@@ -1355,13 +1364,7 @@
     wrap.className = "stage-inline";
 
     if (up === "running") {
-      var track = document.createElement("span");
-      track.className = "kicker-track sm";
-      track.setAttribute("aria-hidden", "true");
-      var fill = document.createElement("span");
-      fill.className = "kicker-fill";
-      track.appendChild(fill);
-      wrap.appendChild(track);
+      wrap.appendChild(makeKicker(true));
       // Cancelar o upscale em andamento: só roda um por vez (guard de "ocupado" no C#), então o
       // "cancel" geral mata exatamente este processo.
       var stopBtn = document.createElement("button");
