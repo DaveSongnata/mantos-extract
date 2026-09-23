@@ -61,6 +61,23 @@ Um defeito que um teste pegou durante a implementação, registrado porque a cau
 passar `undefined` ATIVA o default e cai no env mesmo assim. Virou `requireRecraftKey(raw)` (pura,
 testável) + `recraftApiKey()` (sem parâmetro) — que por acidente feliz é também o desenho mais seguro.
 
+**Correção no mesmo dia, achada revisando a tela do admin com o Dave.** A primeira versão tirava o
+teto e a janela do ciclo do USUÁRIO que chamava, e só o uso da empresa. Dois bugs reais saíram disso:
+liberar a cota na ficha do dono não liberava os operadores (cada um resolvia o próprio plano, não o
+override do dono, então era preciso editar ficha por ficha — o oposto de "cota por empresa"); e
+contas da mesma empresa mediam o MESMO saldo em janelas diferentes, porque sub-tenant costuma ter
+`subscriptionExpiresAt` nulo e a âncora caía no `createdAt` dele. Agora os três — uso, teto e janela
+— saem do tenant raiz (`companyRoot`), com o precedente de `SubscriptionService.effectiveExpiry`
+("the billable entity is the tenant"). Override em sub-tenant virou teto INDIVIDUAL que só aperta
+(`effectiveRecraftLimit`, vale o menor): dá pra segurar um operador, nunca afrouxá-lo além do que a
+empresa tem, porque o saldo é comum. Cuidado não-óbvio coberto por teste: `-1` é o MAIOR valor
+possível apesar de ser o número menor, então `Math.min` cru erra.
+
+O painel da cota em `/admin/mantos-extract` também nasceu errado, só de LEITURA, mandando o admin
+"definir o teto em Planos ou no editor de permissões da ficha" — numa tela onde acesso, prazo, nome
+e notas já eram todos editáveis. Agora edita ali: campo com Salvar, atalhos Ilimitado/Bloquear/Herdar
+do plano, e o texto diz se o número é da empresa ou um teto individual.
+
 **Limitação conhecida:** o addin traduz erro por CÓDIGO (pra atender PT/ES/EN), então o operador lê
 "a cota da sua empresa acabou" sem o "renova em DD/MM" que o servidor calculou. Os números ficam no
 admin. Resolver exigiria campos estruturados no corpo do erro e mexer em `ExtractionClient.BuildError`.

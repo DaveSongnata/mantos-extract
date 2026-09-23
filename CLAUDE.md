@@ -132,8 +132,18 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   não existe tabela de empresa, é o tenant raiz (`parentUserId ?? id`) mais os sub-tenants dele;
   **mensal alinhada à assinatura**, não ao dia 1º (`recraft_cycle.ts`, âncora =
   `subscriptionExpiresAt ?? creditsResetAt ?? createdAt`, sempre somando meses sobre a âncora ORIGINAL
-  pra não driftar em mês curto). Só `status='success'` conta. O limite sai do usuário que chama
-  (plano + `permissionOverrides`), o USO da empresa inteira.
+  pra não driftar em mês curto). Só `status='success'` conta.
+- **Uso, teto E janela saem todos do TENANT RAIZ** (`companyRoot`, corrigido 2026-09-22 revisando a
+  tela do admin). Tirar qualquer um deles do usuário que chama dá bug: o teto tirado do sub-tenant
+  fazia os operadores continuarem em 0 depois do dono ser liberado (cada um resolvia o próprio
+  plano, não o override do dono), e a janela tirada do sub-tenant fazia contas da MESMA empresa
+  medirem o MESMO saldo em períodos diferentes, porque sub-tenant costuma ter
+  `subscriptionExpiresAt` nulo e a âncora caía no `createdAt` dele. O precedente é
+  `SubscriptionService.effectiveExpiry` ("the billable entity is the tenant").
+- **Override em sub-tenant = teto INDIVIDUAL, só aperta** (`effectiveRecraftLimit`): vale o MENOR
+  entre ele e o da empresa. Dá pra segurar um operador, nunca afrouxá-lo além do que a empresa tem —
+  o saldo é comum, e um teto individual maior seria uma promessa que o pool não cobre. Cuidado:
+  `-1` (ilimitado) é o MAIOR valor possível apesar de ser o número menor, então `Math.min` cru erra.
 - **Continua NÃO sendo crédito** (M2 segue revogada): nada é debitado de `creditsRemaining`, nenhuma
   `CreditTransaction`. O consumo é DERIVADO de `generations`, que já logava tudo — era exatamente o
   que o comentário de `routes.ts` guardava ("for a possible future per-plan limit"). Sem contador
@@ -365,5 +375,5 @@ Dois pontos de atenção:
 | M5 | Upscale é processo externo (Real-ESRGAN NCNN-Vulkan via IPC por arquivo, padrão `EngineRunner.cs`), nunca lib embutida no shim nem dependência de Python |
 | M6 | ~~Só bitmap/PNG com transparência — sem SVG~~ → **Revogada em 2026-09-20 quanto ao SVG**: a vetorização (Recraft `vectorize`) devolve SVG, que passa a ser saída válida e entra no Corel ao lado do bitmap. Continua valendo: sem DXF e sem fitting de molde (isso é SISBOLT) |
 | M7 | Sem abstração de troca de provider de IA — é OpenAI direto nos endpoints novos. **A Recraft não é troca de provider, é capacidade nova**: client dedicado (`recraft_client.ts`), sem interface genérica de provider |
-| M9 | Remover fundo/vetorizar têm cota por plano (`plans.limits_mantos_extract_recraft`, `0`/`-1`/`N`), contada por EMPRESA (tenant raiz + sub-tenants) e por ciclo mensal ALINHADO À ASSINATURA (Dave, 2026-09-22). Não é crédito (M2 segue revogada): é derivada de `generations`, nada é debitado. Existe porque a chave da Recraft virou única (M3) — remover a cota sem restaurar o BYOK deixa a conta do Davidson sem teto |
+| M9 | Remover fundo/vetorizar têm cota por plano (`plans.limits_mantos_extract_recraft`, `0`/`-1`/`N`), contada por EMPRESA (tenant raiz + sub-tenants) e por ciclo mensal ALINHADO À ASSINATURA (Dave, 2026-09-22). **Uso, teto e janela saem os três do TENANT RAIZ**; override em sub-tenant só APERTA (teto individual, vale o menor). Não é crédito (M2 segue revogada): é derivada de `generations`, nada é debitado. Existe porque a chave da Recraft virou única (M3) — remover a cota sem restaurar o BYOK deixa a conta do Davidson sem teto |
 | M8 | Fator de upscale é sempre 2× fixo sobre o resultado da extração — nenhuma tabela de mm/px por tipo de peça |
