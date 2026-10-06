@@ -197,6 +197,15 @@
   .icon-btn:hover:not(:disabled){background:var(--accent);}
   .icon-btn:focus-visible{outline:2px solid var(--accent-dark);outline-offset:2px;}
   .icon-btn:disabled{opacity:.35;cursor:not-allowed;}
+  .tool-btn{
+    width:100%;min-width:0;height:44px;padding:0 4px;cursor:pointer;
+    background:var(--surface);color:var(--ink);border:var(--lw) solid var(--ink);border-radius:0;
+    font-family:var(--font);font-weight:900;font-size:11px;text-transform:uppercase;letter-spacing:.02em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .tool-btn:hover:not(:disabled){background:var(--accent);}
+  .tool-btn:focus-visible{outline:2px solid var(--accent-dark);outline-offset:2px;}
+  .tool-btn:disabled{opacity:.35;cursor:not-allowed;}
   .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
   .home-upscale-running{display:flex;align-items:center;justify-content:center;gap:8px;
     font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.02em;
@@ -592,18 +601,11 @@
       <!-- Refino por prompt livre (Dave, 2026-09-18): qualquer imagem selecionada. O botão abre o
            modal #refineModal (Dave, 2026-09-20), que guarda o campo e o resultado. -->
       <div class="icon-row">
-        <button type="button" id="refineOpenBtn" class="icon-btn" disabled data-i18n-title="me.refine.title" title="Refinar com IA">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L16 4l4 4L9 19z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>
-          <span class="sr-only" data-i18n="me.refine.title">Refinar com IA</span>
-        </button>
-        <button type="button" id="removeBgBtn" class="icon-btn" disabled data-i18n-title="me.recraft.removeBg.title" title="Remover fundo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" stroke-dasharray="3 2.5"/><circle cx="12" cy="9.5" r="3"/><path d="M6.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/></svg>
-          <span class="sr-only" data-i18n="me.recraft.removeBg.title">Remover fundo</span>
-        </button>
-        <button type="button" id="vectorizeBtn" class="icon-btn" disabled data-i18n-title="me.recraft.vectorize.title" title="Vetorizar (SVG)">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19C5 10 10 6 19 5"/><rect x="3" y="17" width="4" height="4"/><rect x="17" y="3" width="4" height="4"/></svg>
-          <span class="sr-only" data-i18n="me.recraft.vectorize.title">Vetorizar (SVG)</span>
-        </button>
+        <!-- Texto em vez de ícone (Dave, 2026-10-06): o operador não decifrava os ícones. O
+             tooltip continua com o nome completo. -->
+        <button type="button" id="refineOpenBtn" class="tool-btn" disabled data-i18n="me.home.tool.refine" data-i18n-title="me.refine.title" title="Refinar com IA">Refinar</button>
+        <button type="button" id="removeBgBtn" class="tool-btn" disabled data-i18n="me.home.tool.removeBg" data-i18n-title="me.recraft.removeBg.title" title="Remover fundo">Remover</button>
+        <button type="button" id="vectorizeBtn" class="tool-btn" disabled data-i18n="me.home.tool.vectorize" data-i18n-title="me.recraft.vectorize.title" title="Vetorizar (SVG)">Vetorizar</button>
       </div>
       <!-- O aviso "cadastre a chave da Recraft" morava aqui. Saiu em 2026-09-22: a chave é do
            servidor, e quem não tem direito (plano sem a cota, cota do mês esgotada) só descobre

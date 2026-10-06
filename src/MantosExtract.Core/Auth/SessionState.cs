@@ -27,9 +27,10 @@ namespace MantosExtract.Core.Auth
         }
 
         /// <summary>
-        /// mantosfc's session TTL is a fixed window (SESSION_TTL_CREATOR_HOURS, default 24h) with
-        /// NO refresh endpoint (verified in session_service.ts) — so there is nothing to renew
-        /// locally. Once expired the only path is a fresh login.
+        /// mantosfc's session TTL is a fixed window with NO refresh endpoint (verified in
+        /// session_service.ts) — so there is nothing to renew locally. Logins from this addin get
+        /// SESSION_TTL_EXTRACT_HOURS (default 30 days, since 2026-10-06; the website's creator
+        /// TTL is 24h). Once expired the only path is a fresh login.
         /// </summary>
         public bool IsExpired(DateTimeOffset now) => now >= ExpiresAt;
     }

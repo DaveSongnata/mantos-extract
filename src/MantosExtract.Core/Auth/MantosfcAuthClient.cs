@@ -41,7 +41,10 @@ namespace MantosExtract.Core.Auth
 
         public async Task<LoginResponse> LoginAsync(string email, string password, CancellationToken ct)
         {
-            string body = "{\"email\":" + JsonQuote(email) + ",\"password\":" + JsonQuote(password) + "}";
+            // "client" makes mantosfc issue the addin's longer session (SESSION_TTL_EXTRACT_HOURS,
+            // 30 days) instead of the website's 24 h. Older servers just ignore the field.
+            string body = "{\"email\":" + JsonQuote(email) + ",\"password\":" + JsonQuote(password) +
+                          ",\"client\":\"mantos-extract\"}";
             using var content = new StringContent(body, Encoding.UTF8, "application/json");
             using HttpResponseMessage response = await SendAsync(HttpMethod.Post, "/api/v1/auth/login", content, null, ct)
                 .ConfigureAwait(false);

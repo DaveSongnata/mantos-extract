@@ -29,6 +29,21 @@ namespace MantosExtract.Core.Tests.Auth
         }
 
         [Fact]
+        public async Task LoginAsync_IdentifiesTheAddin_SoTheServerGrantsTheLongSession()
+        {
+            // mantosfc gives logins with client=mantos-extract a 30-day session instead of the
+            // website's 24 h (SESSION_TTL_EXTRACT_HOURS) — without the field the operator is
+            // sent back to the login screen every day.
+            var handler = StubHttpMessageHandler.Json(HttpStatusCode.OK,
+                @"{""sessionId"":""s1"",""expiresAt"":""2026-11-05T12:00:00.000Z"",""role"":""tenant""}");
+            var client = new MantosfcAuthClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.LoginAsync("dono@confeccao.com", "senha123", CancellationToken.None);
+
+            Assert.Contains("\"client\":\"mantos-extract\"", handler.LastRequestBody);
+        }
+
+        [Fact]
         public async Task LoginAsync_UnsupportedRole_ThrowsWithoutHittingAnotherEndpoint()
         {
             var handler = StubHttpMessageHandler.Json(HttpStatusCode.OK,

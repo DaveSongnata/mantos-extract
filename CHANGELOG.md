@@ -6,6 +6,25 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-10-06 — Botões com texto, histórico por empresa, sessão de 30 dias no addin
+
+Versão 0.9.14. Três pedidos do Dave:
+
+- **Botões da tela inicial com texto** ("REFINAR, REMOVER, VETORIZAR" em vez de ícones). Chaves
+  i18n curtas novas (`me.home.tool.*`); o tooltip continua com o nome completo.
+- **Histórico do mantosfc vazava entre clientes** (só servidor). `GET /api/v1/creator/generations`
+  filtrava `userId = eu OR private = false`, então toda geração não-privada de qualquer confecção
+  aparecia para todas. Agora é a EMPRESA (tenant raiz + sub-tenants, `aisten_company`), sem olhar
+  `private`. A visão de tudo continua sendo só a do admin (`/api/v1/admin/generations`). O catálogo
+  (`/creator/arts`) NÃO mudou: lá "pública" é compartilhamento escolhido pelo dono da arte.
+- **Operador deslogado todo dia.** O addin herdava as 24 h de sessão do site. Agora o login manda
+  `client: "mantos-extract"` e o mantosfc dá a essa sessão `SESSION_TTL_EXTRACT_HOURS` (padrão 720 =
+  30 dias). O site continua com 24 h. Servidor antigo ignora o campo (VineJS descarta chave
+  desconhecida), e addin antigo continua com 24 h até atualizar. Ainda derruba a sessão do addin: a
+  opção `enforceSingleSession` do tenant (logar no site revoga as outras sessões) e trocar a senha.
+
+---
+
 ## 2026-09-22 — Recraft com chave única da plataforma + cota por plano/empresa
 
 Versão 0.9.12. Pedido do Dave: "o recraft que hoje é feito com BYOK seja feito com uma chave única
