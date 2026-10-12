@@ -112,6 +112,10 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   imagem a alterar com a seleção atual. A referência vai no campo multipart `reference`; o servidor
   manda as duas pra OpenAI como `image[]` (a editada PRIMEIRO), reduz a referência a 2048 px e o
   prompt diz qual imagem é a saída. Referência igual à imagem a alterar é recusada.
+- **"Ângulo reto" no refino (Dave, 2026-10-12):** caixinha no modal, MARCADA por padrão e
+  remarcada toda vez que o modal abre. Vai como campo `straight_angle`; o texto da regra é do
+  servidor (`buildRefinePrompt`), fora do bloco da instrução. Ausente = desligado. Só no refino,
+  não na extração.
 
 ## Remover fundo e vetorizar — Recraft, chave única + cota (Dave, 2026-09-22)
 

@@ -6,6 +6,28 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-10-12 — "Ângulo reto" no refino
+
+Versão 0.9.15. Pedido do Dave: em vários refinos ele vinha escrevendo "ângulo reto" à mão no
+pedido. Virou uma caixinha no modal "Refinar com IA", logo abaixo do campo de texto, **marcada por
+padrão** e desmarcável.
+
+- **Onde:** só no refino. A extração continua igual — o pedido foi sobre o botão de refino, e a
+  extração já tem o recorte/fundo próprios; ligar ali mudaria toda peça extraída sem ninguém pedir.
+- **Volta marcada toda vez que o modal abre.** Desmarcar vale pro trabalho atual (inclusive pra
+  vários refinos seguidos sem fechar o modal), nunca vira preferência guardada.
+- **A regra é do servidor**, não texto colado na instrução: o addin manda `straight_angle` (`1`/`0`)
+  e o mantosfc acrescenta a regra no prompt (`buildRefinePrompt`), FORA do bloco delimitado da
+  instrução — mesmo motivo do resto do prompt (o operador não escreve regras do sistema). O termo
+  "ângulo reto" vai literal no prompt em inglês, porque era assim que o Dave pedia e o modelo
+  entende; a regra diz que endireitar vence o "preserve enquadramento e proporções".
+- **Compatível nos dois sentidos:** campo ausente = desligado, então addin antigo num servidor novo
+  refina como antes; addin novo num servidor antigo manda um campo que o VineJS descarta.
+- Logado em `generations.requestMeta.straightAngle` e no `docker.log`.
+- A instrução continua obrigatória (mínimo 3 letras) mesmo com a caixinha marcada.
+
+---
+
 ## 2026-10-06 — Botões com texto, histórico por empresa, sessão de 30 dias no addin
 
 Versão 0.9.14. Três pedidos do Dave:

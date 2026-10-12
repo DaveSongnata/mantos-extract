@@ -80,7 +80,7 @@ namespace MantosExtract.Core.Extract
 
         public async Task<ExtractedImage> RefineAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, string instruction, byte[]? referenceBytes, CancellationToken ct,
-            bool legacyModel = false)
+            bool legacyModel = false, bool straightAngle = false)
         {
             using var form = new MultipartFormDataContent();
             form.Add(ImagePart(imageBytes, mimeType), "image", "selecao.png");
@@ -89,6 +89,8 @@ namespace MantosExtract.Core.Extract
             if (referenceBytes != null)
                 form.Add(ImagePart(referenceBytes, "image/png"), "reference", "referencia.png");
             form.Add(new StringContent(instruction ?? ""), "instruction");
+            // Campo próprio, nunca texto colado na instrução: a regra de "ângulo reto" é do servidor.
+            form.Add(new StringContent(straightAngle ? "1" : "0"), "straight_angle");
 
             string url = await PostForUrlAsync("/api/v1/mantos-extract/refine", form, sessionId, openAiApiKey,
                 quality, legacyModel, ct).ConfigureAwait(false);

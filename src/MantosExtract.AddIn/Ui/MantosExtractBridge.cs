@@ -126,6 +126,7 @@ namespace MantosExtract.AddIn.Ui
                 string device = "";
                 string instruction = "";
                 string slot = "";
+                bool straightAngle = false;
                 using (JsonDocument doc = JsonDocument.Parse(json))
                 {
                     JsonElement root = doc.RootElement;
@@ -143,6 +144,7 @@ namespace MantosExtract.AddIn.Ui
                     device = Str(root, "device");
                     instruction = Str(root, "instruction");
                     slot = Str(root, "slot");
+                    straightAngle = root.TryGetProperty("straightAngle", out JsonElement sa) && sa.ValueKind == JsonValueKind.True;
                 }
 
                 // status/cancel/cancelElement furam o busy-guard de propósito: cancelar só faz
@@ -182,7 +184,7 @@ namespace MantosExtract.AddIn.Ui
                     case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, ct)); break;
                     case "cancel": _runningCts?.Cancel(); break;
                     case "cancelElement": CancelElement(elementId); break;
-                    case "refine": RunAsync(ct => RunRefineAsync(instruction, ct)); break;
+                    case "refine": RunAsync(ct => RunRefineAsync(instruction, straightAngle, ct)); break;
                     // Vagas do modal de refino: leitura da seleção síncrona e curta, como o resto
                     // das chamadas COM daqui — sem RunAsync, o busy-guard acima já as barra
                     // enquanto um refino roda.

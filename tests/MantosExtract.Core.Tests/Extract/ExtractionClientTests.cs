@@ -306,6 +306,35 @@ namespace MantosExtract.Core.Tests.Extract
             Assert.Contains("filename=referencia.png", body);
         }
 
+        [Theory]
+        [InlineData(true, "1")]
+        [InlineData(false, "0")]
+        public async Task RefineAsync_StraightAngle_IsSentAsItsOwnField(bool straightAngle, string expected)
+        {
+            string? body = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/r""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.RefineAsync("s1", "k", "medium", new byte[] { 1 }, "image/png", "pinte de azul",
+                null, CancellationToken.None, straightAngle: straightAngle);
+
+            // Nunca embutido no texto da instrução: é regra do servidor, fora do bloco delimitado.
+            Assert.Matches("name=straight_angle\\s+" + expected + "\\s", body!);
+            Assert.DoesNotContain("ângulo reto", body!);
+        }
+
         [Fact]
         public async Task RefineAsync_LegacyFlag_IsSentAsFlagHeader()
         {

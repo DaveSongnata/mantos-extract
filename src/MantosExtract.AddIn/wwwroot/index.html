@@ -185,6 +185,9 @@
   .refine-slot-thumb img{max-width:100%;max-height:100%;display:block;}
   .refine-slot-text{font-size:11px;line-height:1.35;min-width:0;}
   .refine-slot-actions{display:flex;gap:4px;}
+  /* "Ângulo reto" (Dave, 2026-10-12): opção do refino, mesmo checkbox quadrado da tela de seleção. */
+  .refine-option{margin:0 12px;display:flex;align-items:center;gap:8px;cursor:pointer;
+    font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.02em;}
   /* Linha de ações por IA na tela inicial (Dave, 2026-09-20): botões só com ILUSTRAÇÃO (o nome fica
      no tooltip e no texto pra leitor de tela). Traço duro, raio zero, sem cor nova — um ícone por
      ação, nunca sparkle/estrela (clichê de "IA"). */
@@ -652,6 +655,10 @@
         </div>
         <div id="refineSlotError" class="inline-error" hidden></div>
         <textarea id="refineInstruction" maxlength="500" rows="3" data-i18n-placeholder="me.refine.placeholder"></textarea>
+        <label class="refine-option" data-i18n-title="me.refine.straightAngle.hint" title="A peça sai de frente, sem perspectiva nem inclinação.">
+          <input type="checkbox" id="refineStraightAngle" class="swiss-check" checked>
+          <span data-i18n="me.refine.straightAngle">Gerar em ângulo reto</span>
+        </label>
         <button type="button" id="refineBtn" class="primary" disabled data-i18n="me.refine.button">Refinar</button>
         <div id="refineRunning" class="home-upscale-running" hidden>
           <span data-i18n="me.refine.running">Refinando...</span>
@@ -1513,6 +1520,7 @@
     $("refineBtn").disabled = !state.refineSlots.target || upscaleBusy() || typed < 3;
     $("refineRunning").hidden = !running;
     $("refineInstruction").disabled = running;
+    $("refineStraightAngle").disabled = running;
     // Fechar enquanto roda deixaria o operador sem ver o progresso nem o cancelar.
     $("refineClose").disabled = running;
     renderRefineSlot("Target", state.refineSlots.target, "me.refine.slot.empty", running);
@@ -1548,6 +1556,8 @@
     if (state.refine !== "running") {
       state.refineSlots = {target: null, reference: null};
       $("refineSlotError").hidden = true;
+      // "Ângulo reto" sempre volta marcado (Dave, 2026-10-12): desmarcar vale só pra este trabalho.
+      $("refineStraightAngle").checked = true;
       send({cmd:"refineOpen"});
     }
     $("refineModal").hidden = false;
@@ -1566,7 +1576,8 @@
     hide("homeError");
     renderHomeUpscale();
     rerenderResultRows();
-    send({cmd:"refine", instruction: $("refineInstruction").value});
+    send({cmd:"refine", instruction: $("refineInstruction").value,
+          straightAngle: $("refineStraightAngle").checked});
   }
 
   function onRefine(msg){

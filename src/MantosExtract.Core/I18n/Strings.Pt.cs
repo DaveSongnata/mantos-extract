@@ -140,6 +140,8 @@ namespace MantosExtract.Core.I18n
             ["me.refine.error.noTarget"] = "Escolha a imagem a alterar.",
             ["me.refine.error.sameImage"] = "A referência não pode ser a mesma imagem que vai ser alterada. Selecione outra imagem no CorelDRAW.",
             ["me.refine.placeholder"] = "Ex.: remove a pessoa de dentro do carro",
+            ["me.refine.straightAngle"] = "Gerar em ângulo reto",
+            ["me.refine.straightAngle.hint"] = "A peça sai de frente, sem perspectiva nem inclinação.",
             ["me.refine.button"] = "Refinar",
             ["me.refine.close"] = "Fechar",
             ["me.refine.running"] = "Refinando...",

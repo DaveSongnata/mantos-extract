@@ -113,7 +113,7 @@ namespace MantosExtract.AddIn.Ui
             return null;
         }
 
-        private async Task RunRefineAsync(string instruction, CancellationToken ct)
+        private async Task RunRefineAsync(string instruction, bool straightAngle, CancellationToken ct)
         {
             SessionState? session = _credentials.LoadSession();
             if (session == null) { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
@@ -142,14 +142,15 @@ namespace MantosExtract.AddIn.Ui
 
             Post(new { type = "refine", stage = "running" });
             MantosExtractLog.Write("Refino: imagem " + sourceBytes.Length + " bytes, referência " +
-                (referenceBytes == null ? "nenhuma" : referenceBytes.Length + " bytes"));
+                (referenceBytes == null ? "nenhuma" : referenceBytes.Length + " bytes") +
+                ", ângulo reto " + (straightAngle ? "sim" : "não"));
 
             ExtractedImage refined;
             try
             {
                 refined = await _extractionClient
                     .RefineAsync(session.SessionId, openAiKey!, ExtractionQualityStore.Read(), sourceBytes,
-                                 "image/png", instruction, referenceBytes, ct, _useLegacyImageModel)
+                                 "image/png", instruction, referenceBytes, ct, _useLegacyImageModel, straightAngle)
                     .ConfigureAwait(false);
             }
             catch (MantosExtractApiException ex)
