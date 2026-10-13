@@ -120,6 +120,10 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   elementos, não pro "Fundo". Campo `straight_angle` no `/extract` com TRÊS estados no servidor
   (`buildExtractionPrompt`): ausente = prompt de antes intacto (addin antigo), `1` = vista de frente,
   `0` = manter o ângulo da foto. A regra só é acrescentada depois da base; nunca rotação fixa.
+  "Reto" = o motivo INTEIRO, isolado e de frente (Dave: o girassol redondo, sem a manga). Com o campo
+  presente (marcado OU desmarcado) vale também "completar não é inventar": a IA reconstrói a parte do
+  motivo escondida por ângulo/borda/sobreposição, sem acrescentar nada, e devolve só o motivo mesmo
+  quando a caixa da detecção pega a manga inteira (`buildCompleteArtworkRule`).
 - **E2E no Corel desta máquina:** `tools/corel-com/` + `docs/COREL-AUTOMACAO.md` (DevTools 9479 via
   `dev-tools.on`, instalador `/silent`, `Deploy-MantosExtract.ps1`, `Test-StraightAngleE2E.ps1`).
 

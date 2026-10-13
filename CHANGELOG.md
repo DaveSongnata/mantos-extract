@@ -41,11 +41,22 @@ fundo e deixar em "perspectiva reta"). A caixinha do refino (0.9.15) não cobria
   do recorte inclinado — o "desproporcional" do RQ-01). Corrigido em `81fe9de` com "sólido por dentro"
   (também na regra de manter o ângulo) e "nunca esticar, centralize com margem transparente": 2 de 2
   sólidos, de pé e na proporção real.
-- **Girassol da manga (foto real da reunião, `docs/fltl/`):** com a regra final, 2 de 3 extrações
-  saíram como a referência do Davidson (girassol isolado, redondo, de frente); 1 de 3 trouxe a manga
-  inteira, com o tecido vermelho, endireitada. É a questão fundo × estampa, fora do escopo da caixinha
-  (CA-05); o refino com "ângulo reto" segue cobrindo esses casos. Uma frase pra "endireitar o desenho,
-  não o molde da manga" foi testada e DESCARTADA: cortava o girassol na borda do recorte.
+- **Girassol da manga (foto real da reunião, `docs/fltl/`) — definição do Dave:** "reto" é o girassol
+  INTEIRO, isolado e de frente. Com `81fe9de`, 2 de 3 saíam isolados mas cortados e 1 de 3 trazia a
+  manga inteira. Dave também decidiu: "completar não é inventar" — a IA pode COMPLETAR o desenho
+  quando o ângulo, a borda ou uma sobreposição esconde parte dele, mas nunca acrescentar elemento.
+  - `fd4f6d5`: regra "COMPLETE, DO NOT INVENT" nos DOIS estados da caixinha (assim a caixinha mexe só
+    no ângulo, CA-05); addin antigo segue com o prompt antigo. Resolvia o recorte justo, mas não
+    quando a detecção marcava a MANGA inteira (x 2–226): aí voltava a manga (2 de 2 no laboratório).
+  - `414d4a0`: "só o motivo, como um adesivo, mesmo quando a roupa ocupa o recorte" + "nunca devolver
+    cortado reto onde a roupa escondia; reconstrua (flor com o anel inteiro de pétalas)". Laboratório
+    no recorte largo: 2 de 2 girassóis inteiros. E2E no Corel em produção: marcada = girassol inteiro,
+    redondo e de frente (a referência do Davidson); desmarcada = girassol isolado na perspectiva da
+    manga. Regressão do escudo: 11/11 (de pé, eixo 0°; desmarcado mantém ~14°).
+  - Descartada: "endireite o desenho, não o molde da manga" sozinha — cortava o girassol na borda.
+- **Laboratório de prompt:** iterar o texto chamando o `images/edits` direto, com os MESMOS campos do
+  `openai_image_edit_client.ts` e o recorte tirado da MESMA exportação que o addin mandou
+  (`%TEMP%\MantosExtract\work\selecao_*.png`, não o JPG original), e só então fazer deploy.
 
 ---
 
