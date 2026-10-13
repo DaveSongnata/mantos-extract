@@ -548,7 +548,7 @@ namespace MantosExtract.AddIn.Ui
                         .ExtractAsync(session.SessionId, openAiKey!, extractionQuality,
                                        _lastExportedImageBytes, _lastExportedMimeType,
                                        element.Box, element.Label, elementCts.Token, _useLegacyImageModel,
-                                       straightAngle)
+                                       straightAngle, OtherElementLabels.For(_lastDetectedElements, element))
                         .ConfigureAwait(false);
 
                     // Sem upscale aqui (Dave, 2026-09-11): a extração entrega DIRETO, e o upscale

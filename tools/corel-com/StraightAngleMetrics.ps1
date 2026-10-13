@@ -101,6 +101,33 @@ function New-SkewedBadgeFixture {
     return $Path
 }
 
+# Prancha em grade (várias peças, com a proporção de cada uma escrita no título) sobre xadrez.
+function New-ContactSheet {
+    param([Parameter(Mandatory)][string[]]$Images, [Parameter(Mandatory)][string]$Path, [int]$Columns = 4, [int]$Cell = 420)
+    $pad = 16; $head = 44
+    $rows = [Math]::Ceiling($Images.Count / $Columns)
+    $sheet = New-Object System.Drawing.Bitmap(($Columns * ($Cell + $pad) + $pad), ($rows * ($Cell + $head + $pad) + $pad))
+    $g = [System.Drawing.Graphics]::FromImage($sheet)
+    $g.Clear([System.Drawing.Color]::White); $g.InterpolationMode = 'HighQualityBicubic'
+    $font = New-Object System.Drawing.Font('Arial', 14, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    for ($i = 0; $i -lt $Images.Count; $i++) {
+        $x0 = $pad + ($i % $Columns) * ($Cell + $pad); $y0 = $pad + [Math]::Floor($i / $Columns) * ($Cell + $head + $pad)
+        $img = [System.Drawing.Image]::FromFile($Images[$i])
+        $title = '{0}  {1}x{2} ({3})' -f [IO.Path]::GetFileNameWithoutExtension($Images[$i]), $img.Width, $img.Height, $(if ($img.Width -gt $img.Height) { 'deitada' } elseif ($img.Width -lt $img.Height) { 'em pé' } else { 'quadrada' })
+        $g.DrawString($title, $font, [System.Drawing.Brushes]::Black, (New-Object System.Drawing.RectangleF($x0, $y0, $Cell, $head)))
+        $yc = $y0 + $head
+        for ($cy = 0; $cy -lt $Cell; $cy += 20) { for ($cx = 0; $cx -lt $Cell; $cx += 20) {
+            $c = if ((($cx + $cy) / 20) % 2) { [System.Drawing.Brushes]::Gainsboro } else { [System.Drawing.Brushes]::White }
+            $g.FillRectangle($c, $x0 + $cx, $yc + $cy, 20, 20) } }
+        $s = [Math]::Min($Cell / $img.Width, $Cell / $img.Height)
+        $w = [int]($img.Width * $s); $h = [int]($img.Height * $s)
+        $g.DrawImage($img, $x0 + [int](($Cell - $w) / 2), $yc + [int](($Cell - $h) / 2), $w, $h)
+        $img.Dispose()
+    }
+    $g.Dispose(); $sheet.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $sheet.Dispose()
+    return $Path
+}
+
 # Prancha lado a lado (fixture | ângulo reto | sem ângulo reto) sobre xadrez, pra olhar o resultado.
 function New-ComparisonSheet {
     param([Parameter(Mandatory)][string[]]$Images, [Parameter(Mandatory)][string[]]$Titles, [Parameter(Mandatory)][string]$Path)
