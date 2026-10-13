@@ -34,14 +34,9 @@ elseif ([IO.Path]::GetExtension($Photo) -ne '.png') {
     $img.Save($Photo, [System.Drawing.Imaging.ImageFormat]::Png); $img.Dispose()
 }
 
-# ---- DevTools helpers (JS só com aspas SIMPLES: o PowerShell 5.1 estraga aspas duplas em args) ----
-function Js([string]$expr) { $out = & node $cdp eval $expr; if ($LASTEXITCODE -ne 0) { throw "cdp eval falhou: $out" }; return ($out -join "`n") }
-function JsObj([string]$expr) { $j = Js $expr; if ($j -eq 'null' -or -not $j) { return $null }; return ($j | ConvertFrom-Json) }
-function JsWait([string]$cond, [int]$sec = 60) { $null = & node $cdp wait $cond $sec; if ($LASTEXITCODE -ne 0) { throw "tempo esgotado ($sec s) esperando: $cond" } }
-function ResetMsgs { Js '(()=>{ window.__e2e.length=0; return true })()' | Out-Null }
-function LastMsg([string]$type) { JsObj "window.__e2e.filter(m=>m.type==='$type').pop()||null" }
-function Shot([string]$name) { & node $cdp shot (Join-Path $evidence $name) | Out-Null }
-function Visible([string]$id) { [bool](JsObj "!document.getElementById('$id').hidden") }
+# ---- DevTools helpers: Js/JsObj/JsWait/ResetMsgs/LastMsg/Visible/Initialize-MantosPage ----
+. (Join-Path $PSScriptRoot 'MantosPage.ps1')
+function Shot([string]$name) { PageShot (Join-Path $evidence $name) }
 
 $results = New-Object System.Collections.ArrayList
 function Check([string]$caso, [bool]$ok, [string]$detalhe) {
@@ -74,16 +69,7 @@ Write-Host "==> E2E ângulo reto — evidências em $evidence"
 Write-Host "    foto: $Photo $(if ($synthetic) { '(sintética, inclinação conhecida)' })"
 $app = Connect-Corel
 $log = Get-MantosDockerLogPath
-$targets = & node $cdp targets
-if ($LASTEXITCODE -ne 0 -or -not ($targets -match 'mantosextract.app')) { throw "DevTools do Mantos Extract indisponível (porta 9479). Rode Deploy-MantosExtract.ps1 -DevTools e abra o docker. ($targets)" }
-Js "(()=>{ if(!window.__e2eHooked){ window.__e2e=[]; const o=window.mantosExtractReceive; window.mantosExtractReceive=function(m){ try{ window.__e2e.push(typeof m==='string'?JSON.parse(m):m) }catch(e){}; return o.apply(this,arguments) }; window.__e2eHooked=true } window.__e2e.length=0; return true })()" | Out-Null
-
-if (-not (Visible 'screen-home')) {
-    if (Visible 'screen-login') { throw 'O docker está na tela de LOGIN: entre com o usuário do operador e rode de novo.' }
-    Js "(()=>{ window.chrome.webview.postMessage({cmd:'status'}); return true })()" | Out-Null
-    Start-Sleep 2
-    if (-not (Visible 'screen-home')) { throw 'O docker não está na tela inicial (outra tela aberta?). Volte ao início e rode de novo.' }
-}
+Initialize-MantosPage
 if ($OpenAiKeyFile) {
     # Base64 porque a chave passa por argumento de processo nativo (node) e não pode ser logada.
     $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content $OpenAiKeyFile -Raw).Trim()))

@@ -124,6 +124,14 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   presente (marcado OU desmarcado) vale também "completar não é inventar": a IA reconstrói a parte do
   motivo escondida por ângulo/borda/sobreposição, sem acrescentar nada, e devolve só o motivo mesmo
   quando a caixa da detecção pega a manga inteira (`buildCompleteArtworkRule`).
+- **Outros elementos, chroma key e Fundo em pé (Davidson, 2026-10-13, camisa "Sou Patriota"):**
+  - Cada extração leva `other_elements` (rótulo + caixa dos OUTROS elementos da detecção,
+    `OtherElements`): a IA deixa o vizinho de fora e não completa as letras dele. Com vizinho DENTRO
+    do recorte, uma conferência de vazamento (modelo de visão da detecção, BYOK) refaz UMA vez.
+  - No addin novo a transparência NÃO é da OpenAI: ela pinta a peça sobre uma cor chapada que não
+    existe no recorte e o servidor recorta (`mantos_extract_chroma_key.ts`). O `transparent` da
+    OpenAI decide pela COR e esburacava bandeira verde em manga verde — não tem conserto por prompt.
+  - O "Fundo" é sempre em pé, 9:16 (`backgroundOutputSize`), na orientação da camisa de pé.
 - **E2E no Corel desta máquina:** `tools/corel-com/` + `docs/COREL-AUTOMACAO.md` (DevTools 9479 via
   `dev-tools.on`, instalador `/silent`, `Deploy-MantosExtract.ps1`, `Test-StraightAngleE2E.ps1`).
 

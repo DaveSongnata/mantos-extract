@@ -21,6 +21,9 @@ Com isso um agente consegue, sozinho e localmente:
 | `cdp.mjs` | DevTools do docker: `targets`, `eval "<js>"`, `wait "<js>" [s]`, `shot <png>` |
 | `StraightAngleMetrics.ps1` | `New-SkewedBadgeFixture` (foto sintética com escudo inclinado ~15°), `Measure-ExtractedPiece` (cobertura, quanto a peça preenche a própria caixa, ângulo do eixo principal), `New-ComparisonSheet` |
 | `Test-StraightAngleE2E.ps1` | E2E da caixinha "Ângulo reto" na extração (CA-01..CA-07 da especificação de 2026-10-13) |
+| `MantosPage.ps1` | helpers comuns do DevTools: `Initialize-MantosPage` (engancha as mensagens e volta à tela inicial), `Invoke-MantosDetect`, `Select-MantosElements`, `Invoke-MantosExtract` |
+| `Invoke-PhotoExtraction.ps1` | **reproduzir reclamação de cliente:** importa a foto dele, detecta, extrai todos (ou `-ElementMatch`) + `-Background`, e monta `prancha.png` com tamanho e orientação de cada peça; guarda `deteccao.json` |
+| `Invoke-ServerExtraction.ps1` | **testar mudança de servidor sem reinstalar o addin:** usa o `ExtractionClient` de `dist\payload`, a sessão/chave do addin, a foto que o Corel exportou (`%TEMP%\MantosExtract\work\selecao_*.png`) e o `deteccao.json` |
 
 ## Instalador silencioso
 `MantosExtract_Setup.exe /silent` roda o MESMO `InstallerEngine` do assistente, sem janela e sem

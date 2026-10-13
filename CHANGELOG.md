@@ -6,6 +6,40 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-10-13 — Camisa "Sou Patriota": texto misturado, bandeira com buracos, fundo deitado
+
+Versão 0.9.18 + mantosfc `49f34a4`..`742f50d`. Reclamação do Davidson com a foto
+`docs/fltl/imgbroriginal.jpg` (frente e costas lado a lado): "o fundo saiu deitado, era em pé",
+"aquelas partes brancas em volta da bandeira", "o escrito com o fundo, seria só o escrito ou o
+fundo". Reproduzido no Corel pelo pipeline real (`Invoke-PhotoExtraction.ps1`), com a versão atual.
+Causas e correções (todas no servidor, e só para o addin novo, que manda `straight_angle`):
+
+- **Fundo deitado:** o "Fundo" manda a foto inteira e o tamanho seguia a proporção dela (16:9). Agora
+  é SEMPRE em pé, 9:16 (1440×2560, `backgroundOutputSize`), e o prompt compõe o padrão na orientação
+  da camisa de pé, usando só o painel da frente. Vale pra qualquer addin (Fundo não tem campo).
+- **Texto misturado / letras inventadas:** as caixas da detecção se sobrepõem e a IA não sabia que o
+  vizinho já é peça própria; a regra de "completar" (de hoje cedo) ainda a fazia completar o pedaço
+  do vizinho ("PATRÍCIA", "RIMA DE TUDO"). O addin manda `other_elements` (rótulo + caixa de cada
+  OUTRO elemento detectado, `OtherElements`); o prompt manda deixá-los de fora, sem completar letras
+  deles, diz em que faixa do recorte cada vizinho cai, e "rótulo de texto = exatamente aquelas
+  palavras". Mesmo assim "DEUS" (desenhado em bloco com "ACIMA DE TODOS") vazava ~2 de 5: entrou a
+  **conferência de vazamento** (`mantos_extract_leak_check.ts`) — só quando há vizinho dentro do
+  recorte, o modelo de visão da detecção diz quais vizinhos apareceram e, se algum apareceu, a
+  extração é refeita UMA vez dizendo o que vazou. Medido: 3 de 3 limpos (1 com nova tentativa).
+- **Partes brancas na bandeira:** NÃO era prompt (três frases diferentes, nenhuma melhora): o modo
+  `transparent` da OpenAI recorta pela COR, e o verde da bandeira é o verde da manga. Agora a IA pinta
+  a peça sobre uma cor chapada que não existe no recorte (magenta / verde-chroma / azul, escolhida
+  pelo próprio recorte) e o servidor recorta a transparência (`mantos_extract_chroma_key.ts`,
+  difference keying + despill na borda — por distância simples sobrava um halo rosa).
+- **Resultado pela tela real (0.9.18 + produção):** 13 de 13 peças certas na foto do cliente;
+  girassol e escudo sem regressão; E2E do ângulo reto 11/11.
+- **0.9.17 nunca foi instalado** (mandava só os nomes, `other_labels`); a 0.9.18 o substitui.
+- **Ferramentas novas:** `Invoke-PhotoExtraction.ps1` (pipeline real numa foto, prancha com tamanho e
+  orientação), `Invoke-ServerExtraction.ps1` (testa o servidor sem reinstalar o addin, com a foto que
+  o Corel exportou e as caixas salvas) e `MantosPage.ps1` (helpers comuns do DevTools).
+
+---
+
 ## 2026-10-13 — "Ângulo reto" na extração + ferramental E2E no Corel
 
 Versão 0.9.16. Especificação GORE da reunião com o Davidson (girassol na manga: extrair, tirar o
