@@ -26,13 +26,16 @@ Causas e correções (todas no servidor, e só para o addin novo, que manda `str
   **conferência de vazamento** (`mantos_extract_leak_check.ts`) — só quando há vizinho dentro do
   recorte, o modelo de visão da detecção diz quais vizinhos apareceram e, se algum apareceu, a
   extração é refeita UMA vez dizendo o que vazou. Medido: 3 de 3 limpos (1 com nova tentativa).
-- **Partes brancas na bandeira:** NÃO era prompt (três frases diferentes, nenhuma melhora): o modo
-  `transparent` da OpenAI recorta pela COR, e o verde da bandeira é o verde da manga. Agora a IA pinta
-  a peça sobre uma cor chapada que não existe no recorte (magenta / verde-chroma / azul, escolhida
-  pelo próprio recorte) e o servidor recorta a transparência (`mantos_extract_chroma_key.ts`,
-  difference keying + despill na borda — por distância simples sobrava um halo rosa).
-- **Resultado pela tela real (0.9.18 + produção):** 13 de 13 peças certas na foto do cliente;
-  girassol e escudo sem regressão; E2E do ângulo reto 11/11.
+- **Partes brancas na bandeira: limitação da OpenAI, ACEITA (decisão do Dave).** Não é prompt (três
+  frases diferentes, nenhuma melhora): o modo `transparent` da OpenAI recorta pela COR, e o verde da
+  bandeira é o verde da manga — os buracos já vêm no PNG dela. Um chroma key nosso (OpenAI pinta a
+  peça sobre magenta, o servidor recorta) resolveu e chegou a ir pro ar (`49f34a4`), mas o Dave
+  reverteu no mesmo dia (`7bd2dff`): "se a OpenAI está errando, ela está errando de fato"; pintar
+  magenta e recortar no nosso servidor é decisão arquitetural demais. **A transparência é sempre a da
+  OpenAI.** A frase "decida pela forma, não pela cor" ficou no prompt (não piora; não resolve).
+- **Resultado pela tela real (0.9.18 + produção, ainda com o chroma):** 13 de 13 peças certas na foto
+  do cliente; girassol e escudo sem regressão; E2E do ângulo reto 11/11. Depois do revert, as
+  bandeiras de manga podem voltar a sair com partes brancas; o resto não depende do chroma.
 - **0.9.17 nunca foi instalado** (mandava só os nomes, `other_labels`); a 0.9.18 o substitui.
 - **Ferramentas novas:** `Invoke-PhotoExtraction.ps1` (pipeline real numa foto, prancha com tamanho e
   orientação), `Invoke-ServerExtraction.ps1` (testa o servidor sem reinstalar o addin, com a foto que

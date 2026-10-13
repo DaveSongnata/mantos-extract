@@ -128,9 +128,10 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   - Cada extração leva `other_elements` (rótulo + caixa dos OUTROS elementos da detecção,
     `OtherElements`): a IA deixa o vizinho de fora e não completa as letras dele. Com vizinho DENTRO
     do recorte, uma conferência de vazamento (modelo de visão da detecção, BYOK) refaz UMA vez.
-  - No addin novo a transparência NÃO é da OpenAI: ela pinta a peça sobre uma cor chapada que não
-    existe no recorte e o servidor recorta (`mantos_extract_chroma_key.ts`). O `transparent` da
-    OpenAI decide pela COR e esburacava bandeira verde em manga verde — não tem conserto por prompt.
+  - **A transparência é SEMPRE a da OpenAI** (`background: 'transparent'`), decisão do Dave
+    (2026-10-13). O `transparent` dela decide pela COR e esburaca bandeira verde em manga verde — é
+    limitação aceita. Um chroma key nosso (pintar magenta e recortar no servidor) resolvia e foi
+    REVERTIDO: arquitetural demais. Não reintroduzir pós-processamento de alfa sem o Dave pedir.
   - O "Fundo" é sempre em pé, 9:16 (`backgroundOutputSize`), na orientação da camisa de pé.
 - **E2E no Corel desta máquina:** `tools/corel-com/` + `docs/COREL-AUTOMACAO.md` (DevTools 9479 via
   `dev-tools.on`, instalador `/silent`, `Deploy-MantosExtract.ps1`, `Test-StraightAngleE2E.ps1`).
