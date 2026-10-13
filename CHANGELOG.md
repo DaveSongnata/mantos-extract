@@ -6,6 +6,38 @@ cronológica, mais recente no topo.
 
 ---
 
+## 2026-10-13 — "Ângulo reto" na extração + ferramental E2E no Corel
+
+Versão 0.9.16. Especificação GORE da reunião com o Davidson (girassol na manga: extrair, tirar o
+fundo e deixar em "perspectiva reta"). A caixinha do refino (0.9.15) não cobria isso: o pedido é no
+**fluxo de extração**.
+
+- **Onde:** tela de seleção, entre a lista de elementos e o botão "Extrair": "Extrair em ângulo reto",
+  **marcada por padrão** (RF-02/CA-01). Vale pro lote inteiro de ELEMENTOS; o "Fundo" ignora, porque é
+  uma amostra de tecido recomposta, sem ângulo pra endireitar.
+- **Persistência (ponto em aberto da especificação, decidido igual ao refino):** volta marcada a cada
+  foto nova (detecção nova). Desmarcar vale para aquela foto — inclusive no "Tentar de novo" e no modal
+  do modelo anterior, que reaproveitam a tela. Nunca vira preferência guardada.
+- **Três estados no servidor, de propósito** (`buildExtractionPrompt`, `openai_vision_service.ts`):
+  campo ausente (addin antigo) = prompt EXATAMENTE igual ao de antes (RQ-02: não piorar o que
+  funciona); `1` = vista de frente, desfazendo perspectiva/inclinação/cisalhamento/curvatura, e a regra
+  diz que vence o "preserve as proporções" da base; `0` = pede pra MANTER o ângulo da foto (RF-04
+  fala em "tenta manter", não só em calar). A regra é só ACRESCENTADA depois da base — "só o elemento
+  X" e o fundo transparente continuam iguais nos dois casos (CA-04/CA-05).
+- **Nunca rotação fixa (RQ-04):** o texto diz "como se escaneada de frente", proíbe girar por um valor
+  fixo e manda manter inclinação que é DO desenho (letra itálica/diagonal).
+- O addin manda `straight_angle` como campo próprio (mesmo contrato do refino); logado no
+  `docker.log` ("Extração: N elemento(s), fundo …, ângulo reto sim/não") e em
+  `generations.requestMeta.straightAngle`.
+- **Ferramental E2E** (`tools/corel-com/`, `docs/COREL-AUTOMACAO.md`), portado do SisCut/AiSten:
+  porta DevTools só-de-dev no docker (`dev-tools.on`, 9479), **instalador silencioso**
+  (`MantosExtract_Setup.exe /silent`, exit code + log), deploy que fecha/reabre o Corel e confere a
+  versão carregada, e `Test-StraightAngleE2E.ps1`, que usa uma foto SINTÉTICA com o escudo inclinado
+  ~15° pra medir a forma do resultado (quanto a peça preenche a própria caixa e o ângulo do eixo
+  principal) em vez de depender só de olho.
+
+---
+
 ## 2026-10-12 — "Ângulo reto" no refino
 
 Versão 0.9.15. Pedido do Dave: em vários refinos ele vinha escrevendo "ângulo reto" à mão no

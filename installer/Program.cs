@@ -12,7 +12,7 @@ static class Program
     static extern bool SetDllDirectory(string? lpPathName);
 
     [STAThread]
-    static void Main(string[] args)
+    static int Main(string[] args)
     {
         // "Apps & features" invokes the kept copy of this EXE with /uninstall. Handled before
         // anything WebView2-related is touched: the uninstall path must work even on a machine
@@ -20,8 +20,14 @@ static class Program
         if (HasFlag(args, "uninstall"))
         {
             RunUninstall(quiet: HasFlag(args, "quiet"));
-            return;
+            return 0;
         }
+
+        // /silent (2026-10-13, for tools/corel-com/Deploy-MantosExtract.ps1 -Installer): the SAME
+        // InstallerEngine the wizard runs, with no window and no WebView2 — the E2E installs the
+        // real setup .exe it just built instead of a hand-copied payload.
+        if (HasFlag(args, "silent"))
+            return RunSilentInstall();
 
         // Must be set up BEFORE any code that references these assemblies is JIT-compiled.
         // Microsoft.Bcl.AsyncInterfaces is EXCLUDED from ILRepack (its IAsyncDisposable is
@@ -40,6 +46,46 @@ static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.Run(new InstallerForm());
+        return 0;
+    }
+
+    /// <summary>Path where a silent install reports its outcome (a WinExe has no console to
+    /// print to). One line per file plus a final "OK"/"PARCIAL"/"FALHOU" line.</summary>
+    public static string SilentLogPath => Path.Combine(Path.GetTempPath(), "MantosExtract_Installer", "install-silent.log");
+
+    /// <summary>Exit codes: 0 installed, 2 installed but some files failed, 1 not installed
+    /// (Corel open, Corel missing, no space...). The reason is always in <see cref="SilentLogPath"/>.</summary>
+    static int RunSilentInstall()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SilentLogPath)!);
+        using var log = new StreamWriter(SilentLogPath, append: false);
+        log.WriteLine(DateTime.Now.ToString("s") + " instalação silenciosa v" + Core.InstallerEngine.Version);
+        try
+        {
+            var progress = new SyncProgress(p => log.WriteLine(p.Percent.ToString().PadLeft(3) + "% " + p.File));
+            new Core.InstallerEngine(progress).Run();
+            log.WriteLine("OK");
+            return 0;
+        }
+        catch (Core.InstallPartialFailureException ex)
+        {
+            log.WriteLine("PARCIAL: " + ex.Message);
+            return 2;
+        }
+        catch (Exception ex)
+        {
+            log.WriteLine("FALHOU: " + ex.Message);
+            return 1;
+        }
+    }
+
+    /// <summary><see cref="Progress{T}"/> posts to the thread pool, which would race the log
+    /// writer's dispose; the silent install reports inline instead.</summary>
+    sealed class SyncProgress : IProgress<Core.InstallProgress>
+    {
+        readonly Action<Core.InstallProgress> _report;
+        public SyncProgress(Action<Core.InstallProgress> report) { _report = report; }
+        public void Report(Core.InstallProgress value) => _report(value);
     }
 
     static bool HasFlag(string[] args, string name)

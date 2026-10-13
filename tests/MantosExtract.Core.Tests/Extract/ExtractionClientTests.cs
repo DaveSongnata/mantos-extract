@@ -224,6 +224,60 @@ namespace MantosExtract.Core.Tests.Extract
             Assert.False(hasLegacyHeader);
         }
 
+        [Theory]
+        [InlineData(true, "1")]
+        [InlineData(false, "0")]
+        public async Task ExtractAsync_StraightAngle_IsSentAsItsOwnField(bool straightAngle, string expected)
+        {
+            string? body = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/abc""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.ExtractAsync("s1", "key", "medium", new byte[] { 9 }, "image/png",
+                new BoundingBox(1, 2, 3, 4), "girassol", CancellationToken.None, straightAngle: straightAngle);
+
+            // "0" também vai: desmarcado pede pra MANTER o ângulo da foto, não é o mesmo que ausente.
+            Assert.Matches("name=straight_angle\\s+" + expected + "\\s", body!);
+            Assert.DoesNotContain("ângulo reto", body!);
+        }
+
+        [Fact]
+        public async Task ExtractAsync_WithoutStraightAngle_OmitsTheField()
+        {
+            string? body = null;
+            var handler = new StubHttpMessageHandler(req =>
+            {
+                if (req.Method == HttpMethod.Post)
+                {
+                    body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                    return new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(@"{""url"":""https://mantosfc.test/api/v1/images/abc""}",
+                            Encoding.UTF8, "application/json"),
+                    };
+                }
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(new byte[] { 1 }) };
+            });
+            var client = new ExtractionClient(handler, new Uri("https://mantosfc.test"));
+
+            await client.ExtractAsync("s1", "key", "medium", new byte[] { 9 }, "image/png",
+                new BoundingBox(1, 2, 3, 4), "logo", CancellationToken.None);
+
+            Assert.DoesNotContain("straight_angle", body!);
+        }
+
         [Fact]
         public async Task ExtractAsync_ModelUnavailable_SurfacesServerCodeAndMessage()
         {

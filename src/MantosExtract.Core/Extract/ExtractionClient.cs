@@ -49,7 +49,7 @@ namespace MantosExtract.Core.Extract
         // true depois do operador aceitar o modal "usar o modelo anterior" (chave sem acesso ao 2.5).
         public async Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct,
-            bool legacyModel = false)
+            bool legacyModel = false, bool? straightAngle = null)
         {
             using var form = new MultipartFormDataContent();
             form.Add(ImagePart(imageBytes, mimeType), "image", "selection.png");
@@ -58,6 +58,9 @@ namespace MantosExtract.Core.Extract
             form.Add(new StringContent(box.XMax.ToString()), "x_max");
             form.Add(new StringContent(box.YMax.ToString()), "y_max");
             form.Add(new StringContent(label ?? ""), "label");
+            // Mesmo contrato do refino: campo próprio, a regra do prompt é do servidor.
+            if (straightAngle.HasValue)
+                form.Add(new StringContent(straightAngle.Value ? "1" : "0"), "straight_angle");
 
             string url = await PostForUrlAsync("/api/v1/mantos-extract/extract", form, sessionId, openAiApiKey,
                 quality, legacyModel, ct).ConfigureAwait(false);

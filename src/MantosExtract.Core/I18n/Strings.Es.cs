@@ -87,6 +87,8 @@ namespace MantosExtract.Core.I18n
             ["me.select.selectedCount"] = "{0} seleccionados",
             ["me.select.backButton"] = "Seleccionar otra imagen",
             ["me.select.backgroundLabel"] = "Fondo",
+            ["me.select.straightAngle"] = "Extraer en ángulo recto",
+            ["me.select.straightAngle.hint"] = "Los elementos salen de frente, sin perspectiva ni inclinación. Desmárquelo para mantener el ángulo de la foto.",
 
             ["me.extract.progress.extracting"] = "extrayendo...",
             ["me.extract.progress.queued"] = "en espera",

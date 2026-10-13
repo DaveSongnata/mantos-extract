@@ -181,7 +181,7 @@ namespace MantosExtract.AddIn.Ui
                     case "changePassword": RunAsync(ct => ChangePasswordAsync(currentPassword, newPassword, ct)); break;
 
                     case "detect": RunAsync(ct => RunDetectAsync(ct)); break;
-                    case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, ct)); break;
+                    case "extract": RunAsync(ct => RunExtractAsync(confirmedIds, straightAngle, ct)); break;
                     case "cancel": _runningCts?.Cancel(); break;
                     case "cancelElement": CancelElement(elementId); break;
                     case "refine": RunAsync(ct => RunRefineAsync(instruction, straightAngle, ct)); break;
@@ -451,7 +451,9 @@ namespace MantosExtract.AddIn.Ui
         // bater com SELECTION_UPSCALE_ID no index.html.
         private const string SelectionUpscaleId = "__selection__";
 
-        private async Task RunExtractAsync(string[] confirmedIds, CancellationToken ct)
+        // straightAngle = caixinha "ângulo reto" da tela de seleção (Davidson, 2026-10-13). Vale pros
+        // ELEMENTOS; o "Fundo" é uma amostra de tecido recomposta, não tem ângulo pra endireitar.
+        private async Task RunExtractAsync(string[] confirmedIds, bool straightAngle, CancellationToken ct)
         {
             SessionState? session = _credentials.LoadSession();
             if (session == null) { PostAuth(AuthOrchestratorResult.ToLogin()); return; }
@@ -478,6 +480,8 @@ namespace MantosExtract.AddIn.Ui
             // que já existia — `confirmed`/`confirmedIds` nunca inclui o ID sentinela, então esse
             // fluxo roda IDÊNTICO a antes quando "Fundo" não está marcado.
             List<DetectedElement> confirmed = ResolveConfirmedElements(elementIds);
+            MantosExtractLog.Write("Extração: " + confirmed.Count + " elemento(s), fundo " + (wantsBackground ? "sim" : "não") +
+                ", ângulo reto " + (straightAngle ? "sim" : "não"));
             // Lote novo: o upscale opcional só pode agir sobre o que ESTE lote produziu.
             _extractedFiles.Clear();
             string extractionQuality = ExtractionQualityStore.Read();
@@ -543,7 +547,8 @@ namespace MantosExtract.AddIn.Ui
                     ExtractedImage extracted = await _extractionClient
                         .ExtractAsync(session.SessionId, openAiKey!, extractionQuality,
                                        _lastExportedImageBytes, _lastExportedMimeType,
-                                       element.Box, element.Label, elementCts.Token, _useLegacyImageModel)
+                                       element.Box, element.Label, elementCts.Token, _useLegacyImageModel,
+                                       straightAngle)
                         .ConfigureAwait(false);
 
                     // Sem upscale aqui (Dave, 2026-09-11): a extração entrega DIRETO, e o upscale

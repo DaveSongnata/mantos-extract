@@ -6,9 +6,12 @@ namespace MantosExtract.Core.Extract
 {
     public interface IExtractionClient
     {
+        /// <summary><paramref name="straightAngle"/> é a caixinha "ângulo reto" da tela de seleção
+        /// (Davidson, 2026-10-13): true endireita a peça, false pede pra manter o ângulo da foto,
+        /// null não manda o campo (o servidor usa o prompt de antes da caixinha).</summary>
         Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct,
-            bool legacyModel = false);
+            bool legacyModel = false, bool? straightAngle = null);
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — método SEPARADO de ExtractAsync, de propósito:
         /// sem BoundingBox/label (a foto INTEIRA vai pro servidor, não uma região confirmada),

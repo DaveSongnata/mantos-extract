@@ -138,7 +138,8 @@ namespace MantosExtract.AddIn.Ui
                     SetDllDirectory(MantosExtractBridge.InstallDir());
                     try
                     {
-                        CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(null, MantosExtractBridge.UserDataDir());
+                        CoreWebView2Environment env = await CoreWebView2Environment.CreateAsync(
+                            null, MantosExtractBridge.UserDataDir(), MantosExtractDevTools.EnvironmentOptions());
                         await _web.EnsureCoreWebView2Async(env);
                     }
                     finally { SetDllDirectory(null); }

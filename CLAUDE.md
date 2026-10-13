@@ -114,8 +114,14 @@ detecção + N para extrair". Nenhuma dessas duas coisas reflete o comportamento
   prompt diz qual imagem é a saída. Referência igual à imagem a alterar é recusada.
 - **"Ângulo reto" no refino (Dave, 2026-10-12):** caixinha no modal, MARCADA por padrão e
   remarcada toda vez que o modal abre. Vai como campo `straight_angle`; o texto da regra é do
-  servidor (`buildRefinePrompt`), fora do bloco da instrução. Ausente = desligado. Só no refino,
-  não na extração.
+  servidor (`buildRefinePrompt`), fora do bloco da instrução. Ausente = desligado.
+- **"Ângulo reto" na extração (Davidson, 2026-10-13, especificação GORE):** caixinha "Extrair em
+  ângulo reto" na tela de seleção, MARCADA por padrão e remarcada a cada detecção nova; vale pros
+  elementos, não pro "Fundo". Campo `straight_angle` no `/extract` com TRÊS estados no servidor
+  (`buildExtractionPrompt`): ausente = prompt de antes intacto (addin antigo), `1` = vista de frente,
+  `0` = manter o ângulo da foto. A regra só é acrescentada depois da base; nunca rotação fixa.
+- **E2E no Corel desta máquina:** `tools/corel-com/` + `docs/COREL-AUTOMACAO.md` (DevTools 9479 via
+  `dev-tools.on`, instalador `/silent`, `Deploy-MantosExtract.ps1`, `Test-StraightAngleE2E.ps1`).
 
 ## Remover fundo e vetorizar — Recraft, chave única + cota (Dave, 2026-09-22)
 

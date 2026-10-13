@@ -186,8 +186,10 @@
   .refine-slot-text{font-size:11px;line-height:1.35;min-width:0;}
   .refine-slot-actions{display:flex;gap:4px;}
   /* "Ângulo reto" (Dave, 2026-10-12): opção do refino, mesmo checkbox quadrado da tela de seleção. */
-  .refine-option{margin:0 12px;display:flex;align-items:center;gap:8px;cursor:pointer;
+  .refine-option,.select-option{margin:0 12px;display:flex;align-items:center;gap:8px;cursor:pointer;
     font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.02em;}
+  /* A mesma opção na tela de seleção (Davidson, 2026-10-13): vale pro lote inteiro de elementos. */
+  .select-option{margin:0;}
   /* Linha de ações por IA na tela inicial (Dave, 2026-09-20): botões só com ILUSTRAÇÃO (o nome fica
      no tooltip e no texto pra leitor de tela). Traço duro, raio zero, sem cor nova — um ícone por
      ação, nunca sparkle/estrela (clichê de "IA"). */
@@ -701,6 +703,11 @@
       <div id="selectNone" class="muted" data-i18n="me.select.none" hidden>Nenhum elemento detectado nesta imagem.</div>
       <div id="selectChecklist" class="checklist"></div>
 
+      <label class="select-option" data-i18n-title="me.select.straightAngle.hint" title="Os elementos saem de frente, sem perspectiva nem inclinação. Desmarque para manter o ângulo da foto.">
+        <input type="checkbox" id="selectStraightAngle" class="swiss-check" checked>
+        <span data-i18n="me.select.straightAngle">Extrair em ângulo reto</span>
+      </label>
+
       <div class="select-footer">
         <div class="select-count">
           <span id="selectedCount"></span>
@@ -1166,6 +1173,9 @@
 
     state.lastDetection = msg;
     state.confirmedIds = [];
+    // "Ângulo reto" volta marcado a cada foto nova (Davidson, 2026-10-13: é o caso mais comum, e
+    // o refino já se comporta assim). Desmarcar vale para esta foto, inclusive no "tentar de novo".
+    $("selectStraightAngle").checked = true;
     renderSelectScreen();
   }
 
@@ -1287,7 +1297,7 @@
     });
     showScreen("screen-extracting");
     startElapsed("extractingElapsed");
-    send({cmd:"extract", ids: ids});
+    send({cmd:"extract", ids: ids, straightAngle: $("selectStraightAngle").checked});
   }
 
   $("extractCancelAllBtn").addEventListener("click", function(){ send({cmd:"cancel"}); });
