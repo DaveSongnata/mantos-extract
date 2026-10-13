@@ -35,6 +35,17 @@ fundo e deixar em "perspectiva reta"). A caixinha do refino (0.9.15) não cobria
   versão carregada, e `Test-StraightAngleE2E.ps1`, que usa uma foto SINTÉTICA com o escudo inclinado
   ~15° pra medir a forma do resultado (quanto a peça preenche a própria caixa e o ângulo do eixo
   principal) em vez de depender só de olho.
+- **O E2E pegou dois defeitos na 1ª versão da regra** (mantosfc `7b2d1da`, 2 de 2 vezes; o prompt
+  sem o campo não tinha nenhum): o modelo endireitava o escudo mas APAGAVA o painel de cor de dentro
+  dele como se fosse fundo, e ESTICAVA a peça pra encher o quadro (escudo 2:1 saía 1,65:1, a proporção
+  do recorte inclinado — o "desproporcional" do RQ-01). Corrigido em `81fe9de` com "sólido por dentro"
+  (também na regra de manter o ângulo) e "nunca esticar, centralize com margem transparente": 2 de 2
+  sólidos, de pé e na proporção real.
+- **Girassol da manga (foto real da reunião, `docs/fltl/`):** com a regra final, 2 de 3 extrações
+  saíram como a referência do Davidson (girassol isolado, redondo, de frente); 1 de 3 trouxe a manga
+  inteira, com o tecido vermelho, endireitada. É a questão fundo × estampa, fora do escopo da caixinha
+  (CA-05); o refino com "ângulo reto" segue cobrindo esses casos. Uma frase pra "endireitar o desenho,
+  não o molde da manga" foi testada e DESCARTADA: cortava o girassol na borda do recorte.
 
 ---
 

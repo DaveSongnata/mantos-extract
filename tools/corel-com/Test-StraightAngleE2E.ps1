@@ -27,6 +27,12 @@ $evidence = Join-Path $MantosTestRoots[0] ('run-' + (Get-Date -Format 'yyyyMMdd-
 New-Item -ItemType Directory -Force $evidence | Out-Null
 $synthetic = -not $Photo
 if ($synthetic) { $Photo = New-SkewedBadgeFixture (Join-Path $evidence 'foto-badge-inclinado.png') }
+elseif ([IO.Path]::GetExtension($Photo) -ne '.png') {
+    # Import-CorelBitmap usa o filtro PNG (802, CorelConstants): converte uma cópia, o original fica intacto.
+    $img = [System.Drawing.Image]::FromFile((Resolve-Path $Photo).Path)
+    $Photo = Join-Path $evidence ([IO.Path]::GetFileNameWithoutExtension($Photo) + '.png')
+    $img.Save($Photo, [System.Drawing.Imaging.ImageFormat]::Png); $img.Dispose()
+}
 
 # ---- DevTools helpers (JS só com aspas SIMPLES: o PowerShell 5.1 estraga aspas duplas em args) ----
 function Js([string]$expr) { $out = & node $cdp eval $expr; if ($LASTEXITCODE -ne 0) { throw "cdp eval falhou: $out" }; return ($out -join "`n") }
