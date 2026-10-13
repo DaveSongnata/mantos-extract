@@ -26,6 +26,18 @@ $userTemp = Get-UserTemp
 $log = Get-MantosDockerLogPath
 $work = Join-Path $env:LOCALAPPDATA 'Temp\MantosExtract.Deploy'
 New-Item -ItemType Directory -Force $work | Out-Null
+# Qualquer falha (ex.: UAC recusado ou expirado — aconteceu em 2026-10-13): se o Corel já tinha sido
+# fechado, reabre com a versão que estava instalada em vez de deixar o Dave sem Corel.
+trap {
+    Write-Host "==> FALHOU: $($_.Exception.Message)"
+    if (-not (Get-Process CorelDRW -ErrorAction SilentlyContinue) -and $corelClosed) {
+        Write-Host '    reabrindo o CorelDRAW com a versão que estava instalada'
+        $env:TEMP = $userTemp; $env:TMP = $userTemp
+        Start-Process -FilePath (Join-Path $corelDir 'CorelDRW.exe')
+    }
+    exit 1
+}
+$corelClosed = $false
 
 $tag = ([regex]::Match((Get-Content "$repo\src\MantosExtract.AddIn\Build.cs" -Raw), 'Tag = "(.*?)"')).Groups[1].Value
 Write-Host "==> Deploy Mantos Extract $tag"
@@ -94,6 +106,7 @@ if (@(Get-Process CorelDRW -ErrorAction SilentlyContinue).Count -gt 0) {
         Get-Process CorelDRW | Stop-Process -Force
         Start-Sleep 2
     }
+    $corelClosed = $true
 }
 
 if ($CopyPayload) {

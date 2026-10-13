@@ -254,7 +254,7 @@ namespace MantosExtract.Core.Tests.Extract
         }
 
         [Fact]
-        public async Task ExtractAsync_OtherLabels_GoAsAJsonListInTheirOwnField()
+        public async Task ExtractAsync_OtherElements_GoAsJsonWithLabelAndBox()
         {
             string? body = null;
             var handler = new StubHttpMessageHandler(req =>
@@ -274,9 +274,16 @@ namespace MantosExtract.Core.Tests.Extract
 
             await client.ExtractAsync("s1", "key", "medium", new byte[] { 9 }, "image/png",
                 new BoundingBox(1, 2, 3, 4), "bandeira do Brasil frontal", CancellationToken.None,
-                straightAngle: true, otherLabels: new[] { "texto Sou", "texto \"PATRIOTA\"" });
+                straightAngle: true, otherElements: new[]
+                {
+                    new DetectedElement("el_1", "texto Sou", new BoundingBox(190, 165, 305, 259)),
+                    new DetectedElement("el_2", "texto PATRIOTA", new BoundingBox(137, 202, 374, 356)),
+                });
 
-            Assert.Matches("name=other_labels\\s+\\[\"texto Sou\",\"texto \\\\u0022PATRIOTA\\\\u0022\"\\]", body!);
+            Assert.Contains("name=other_elements", body!);
+            Assert.Contains("\"label\":\"texto Sou\",\"x_min\":190,\"y_min\":165,\"x_max\":305,\"y_max\":259", body!);
+            Assert.Contains("\"label\":\"texto PATRIOTA\"", body!);
+            Assert.DoesNotContain("other_labels", body!);
         }
 
         [Fact]

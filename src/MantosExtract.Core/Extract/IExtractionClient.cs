@@ -10,11 +10,11 @@ namespace MantosExtract.Core.Extract
         /// <summary><paramref name="straightAngle"/> é a caixinha "ângulo reto" da tela de seleção
         /// (Davidson, 2026-10-13): true endireita a peça, false pede pra manter o ângulo da foto,
         /// null não manda o campo (o servidor usa o prompt de antes da caixinha).
-        /// <paramref name="otherLabels"/> são os rótulos dos OUTROS elementos detectados
-        /// (<see cref="OtherElementLabels"/>): a IA deixa de fora o vizinho que já é peça própria.</summary>
+        /// <paramref name="otherElements"/> são os OUTROS elementos detectados (rótulo + caixa)
+        /// (<see cref="OtherElements"/>): a IA deixa de fora o vizinho que já é peça própria.</summary>
         Task<ExtractedImage> ExtractAsync(string sessionId, string openAiApiKey, string quality,
             byte[] imageBytes, string mimeType, BoundingBox box, string label, CancellationToken ct,
-            bool legacyModel = false, bool? straightAngle = null, IReadOnlyList<string>? otherLabels = null);
+            bool legacyModel = false, bool? straightAngle = null, IReadOnlyList<DetectedElement>? otherElements = null);
 
         /// <summary>"Fundo" (Dave, 2026-09-11) — método SEPARADO de ExtractAsync, de propósito:
         /// sem BoundingBox/label (a foto INTEIRA vai pro servidor, não uma região confirmada),
