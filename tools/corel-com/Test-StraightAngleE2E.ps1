@@ -101,6 +101,7 @@ try {
     JsWait "window.__e2e.some(m=>m.type==='detect')" 300
     $det = LastMsg 'detect'
     if (-not $det.ok) { throw "detecção falhou: $($det.code) $($det.error)" }
+    $det | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $evidence 'deteccao.json') -Encoding UTF8
     $els = @($det.elements)
     Write-Host ("    detectados: " + (($els | ForEach-Object { $_.label }) -join ' | '))
     if ($els.Count -eq 0) { throw 'nenhum elemento detectado' }
@@ -131,7 +132,8 @@ try {
     Js "(()=>{ document.getElementById('selectBackBtn').click(); return true })()" | Out-Null
 
     # ---------- CA-07: instruções diferentes ----------
-    $newLog = if (Test-Path $log) { Get-Content $log | Select-Object -Skip $logMark } else { @() }
+    # O docker.log é UTF-8 sem BOM: sem -Encoding o PowerShell 5.1 lê como ANSI e "ângulo" não casa.
+    $newLog = if (Test-Path $log) { Get-Content $log -Encoding UTF8 | Select-Object -Skip $logMark } else { @() }
     $sim = [bool]($newLog | Select-String 'Extração: 1 elemento\(s\), fundo não, ângulo reto sim')
     $nao = [bool]($newLog | Select-String 'Extração: 1 elemento\(s\), fundo não, ângulo reto não')
     Check 'CA-07 add-in mandou marcada e desmarcada (docker.log)' ($sim -and $nao) "sim=$sim não=$nao"
